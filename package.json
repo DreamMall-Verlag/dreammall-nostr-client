@@ -29,7 +29,6 @@
     "prettier": "^3.1.0",
     "terser": "^5.24.0",
     "vite": "^7.0.4",
-    "vite-plugin-pwa": "^0.17.0",
     "vitest": "^1.0.0"
   },
   "keywords": [
@@ -61,16 +60,5 @@
     "last 2 versions",
     "not dead",
     "not ie 11"
-  ],
-  "pwa": {
-    "name": "DreamMall NOSTR Client",
-    "short_name": "DreamMall",
-    "description": "Decentralized messaging with NOSTR protocol",
-    "theme_color": "#667eea",
-    "background_color": "#ffffff",
-    "display": "standalone",
-    "orientation": "portrait",
-    "scope": "/",
-    "start_url": "/"
-  }
+  ]
 }
