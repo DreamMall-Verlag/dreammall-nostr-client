@@ -291,4 +291,62 @@ export class KeyService {
         const keyPair = await this.getKeyPair();
         return keyPair?.secretKey ? new Uint8Array(keyPair.secretKey) : null;
     }
+
+    getCurrentUser() {
+        if (!this.keyPair) {
+            return null;
+        }
+
+        return {
+            publicKey: this.keyPair.publicKey,
+            secretKey: this.keyPair.secretKey, // Array format
+            npub: this.keyPair.npub,
+            nsec: this.keyPair.nsec,
+            profile: this.profile
+        };
+    }
+
+    async getDecryptedKeys(password = null) {
+        try {
+            // Check if we have keys
+            if (!this.keyPair) {
+                await this.loadKeys();
+            }
+
+            if (!this.keyPair) {
+                throw new Error('Keine Schlüssel vorhanden');
+            }
+
+            // If keys were generated (not imported with password), no password needed
+            if (this.keyPair.created && !this.keyPair.encrypted) {
+                return {
+                    privateKey: this.keyPair.nsec,
+                    publicKey: this.keyPair.publicKey,
+                    npub: this.keyPair.npub
+                };
+            }
+
+            // If keys are encrypted, we need a password
+            if (this.keyPair.encrypted) {
+                if (!password) {
+                    throw new Error('Passwort erforderlich für verschlüsselte Schlüssel');
+                }
+                
+                // TODO: Implement password-based decryption
+                // For now, return error
+                throw new Error('Passwort-basierte Entschlüsselung noch nicht implementiert');
+            }
+
+            // Fallback: return keys as-is
+            return {
+                privateKey: this.keyPair.nsec,
+                publicKey: this.keyPair.publicKey,
+                npub: this.keyPair.npub
+            };
+
+        } catch (error) {
+            console.error('❌ Fehler beim Entschlüsseln der Schlüssel:', error);
+            throw error;
+        }
+    }
 }

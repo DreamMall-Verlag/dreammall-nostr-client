@@ -9,12 +9,7 @@ export class RelayService {
         this.nostrService = null;
         this.connectionState = 'disconnected';
         this.defaultRelays = [
-            'wss://relay.bostr.shop',
-            'wss://relay.verified-nostr.com',
-            'wss://relay.emre.xyz',
-            'wss://cfrelay.haorendashu.workers.dev',
-            'wss://relay.nostraddress.com',
-            'wss://sendit.nosflare.com'
+            'wss://relay.damus.io'  // Nur ein zuverlässiges Relay für Tests
         ];
     }
 
@@ -296,19 +291,6 @@ export class RelayService {
         return 'sub_' + Math.random().toString(36).substr(2, 9);
     }
 
-    disconnect() {
-        this.connectionState = 'disconnected';
-        
-        for (const [url, relay] of this.relays) {
-            if (relay.ws) {
-                relay.ws.close();
-            }
-        }
-        
-        this.relays.clear();
-        console.log('🔌 Alle Relay-Verbindungen getrennt');
-    }
-
     getStatus() {
         return {
             state: this.connectionState,
@@ -320,137 +302,91 @@ export class RelayService {
     // Professional relay management methods
     async addRelay(url) {
         try {
-            if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
-                throw new Error('Invalid relay URL format');
+            if (this.relays.has(url)) {
+                throw new Error('Relay bereits vorhanden');
             }
             
-            const savedRelays = this.getSavedRelays();
-            if (savedRelays.includes(url)) {
-                console.log(`⚠️ Relay bereits vorhanden: ${url}`);
-                return false;
-            }
-            
-            savedRelays.push(url);
-            localStorage.setItem('nostr_relays', JSON.stringify(savedRelays));
-            
-            // Try to connect immediately
-            const connected = await this.connectToRelay(url);
-            
-            this.emit('relayAdded', { url, connected });
-            console.log(`✅ Relay hinzugefügt: ${url}`);
-            
-            return true;
+            const relay = await this.connectToRelay(url);
+            toastService.success(`Relay ${url} erfolgreich hinzugefügt`);
+            return relay;
         } catch (error) {
-            console.error('❌ Fehler beim Hinzufügen des Relays:', error);
+            console.error(`❌ Relay hinzufügen fehlgeschlagen: ${url}`, error);
             throw error;
         }
     }
 
     async removeRelay(url) {
         try {
-            const savedRelays = this.getSavedRelays();
-            const index = savedRelays.indexOf(url);
-            
-            if (index === -1) {
-                console.log(`⚠️ Relay nicht gefunden: ${url}`);
-                return false;
+            if (!this.relays.has(url)) {
+                throw new Error('Relay nicht gefunden');
             }
             
-            savedRelays.splice(index, 1);
-            localStorage.setItem('nostr_relays', JSON.stringify(savedRelays));
-            
-            // Disconnect from relay
             const relay = this.relays.get(url);
-            if (relay && relay.ws) {
-                relay.ws.close();
+            if (relay && relay.connected) {
+                await relay.close();
             }
+            
             this.relays.delete(url);
+            const savedRelays = this.getRelayUrls().filter(r => r !== url);
+            this.storage.setItem('relays', JSON.stringify(savedRelays));
             
-            this.emit('relayRemoved', { url });
-            console.log(`🗑️ Relay entfernt: ${url}`);
-            
+            console.log(`✅ Relay entfernt: ${url}`);
             return true;
         } catch (error) {
-            console.error('❌ Fehler beim Entfernen des Relays:', error);
+            console.error(`❌ Relay entfernen fehlgeschlagen: ${url}`, error);
             throw error;
         }
     }
 
-    getRelayStats() {
-        const stats = {
-            total: this.relays.size,
-            connected: 0,
-            disconnected: 0,
-            relays: []
-        };
-        
-        for (const [url, relay] of this.relays) {
-            const relayInfo = {
-                url: url,
-                connected: relay.connected,
-                lastPing: relay.lastPing,
-                messageCount: relay.messageCount || 0
-            };
+    async testRelay(url) {
+        try {
+            const relay = this.pool.ensureRelay(url);
+            await relay.connect();
             
-            stats.relays.push(relayInfo);
-            
-            if (relay.connected) {
-                stats.connected++;
-            } else {
-                stats.disconnected++;
-            }
+            const isConnected = relay.connected;
+            console.log(`🔗 Relay Test: ${url} - ${isConnected ? 'Connected' : 'Failed'}`);
+            return isConnected;
+        } catch (error) {
+            console.error(`❌ Relay Test fehlgeschlagen: ${url}`, error);
+            return false;
         }
-        
+    }
+
+    getRelayStats() {
+        const stats = {};
+        for (const [url, relay] of this.relays) {
+            stats[url] = {
+                connected: relay.connected,
+                url: relay.url,
+                status: relay.connected ? 'connected' : 'disconnected'
+            };
+        }
         return stats;
     }
 
-    async testRelay(url) {
-        return new Promise((resolve) => {
-            try {
-                const ws = new WebSocket(url);
-                const timeout = setTimeout(() => {
-                    ws.close();
-                    resolve({ url, success: false, error: 'Timeout' });
-                }, 5000);
-                
-                ws.onopen = () => {
-                    clearTimeout(timeout);
-                    ws.close();
-                    resolve({ url, success: true, latency: Date.now() - start });
-                };
-                
-                ws.onerror = (error) => {
-                    clearTimeout(timeout);
-                    resolve({ url, success: false, error: error.message });
-                };
-                
-                const start = Date.now();
-            } catch (error) {
-                resolve({ url, success: false, error: error.message });
-            }
-        });
+    getRelayUrls() {
+        try {
+            const saved = this.storage.getItem('relays');
+            return saved ? JSON.parse(saved) : this.defaultRelays;
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der Relays:', error);
+            return this.defaultRelays;
+        }
     }
 
-    async optimizeRelayConnections() {
-        console.log('🔍 Optimiere Relay-Verbindungen...');
-        
-        const allRelays = [...this.defaultRelays, ...this.getSavedRelays()];
-        const uniqueRelays = [...new Set(allRelays)];
-        
-        const testPromises = uniqueRelays.map(url => this.testRelay(url));
-        const results = await Promise.all(testPromises);
-        
-        const workingRelays = results
-            .filter(r => r.success)
-            .sort((a, b) => a.latency - b.latency)
-            .slice(0, 8) // Keep best 8 relays
-            .map(r => r.url);
-        
-        localStorage.setItem('nostr_relays', JSON.stringify(workingRelays));
-        
-        console.log(`✅ ${workingRelays.length} optimierte Relays gespeichert`);
-        this.emit('relaysOptimized', { relays: workingRelays });
-        
-        return workingRelays;
+    async disconnect() {
+        try {
+            for (const [url, relay] of this.relays) {
+                if (relay.connected) {
+                    await relay.close();
+                }
+            }
+            this.relays.clear();
+            console.log('🔌 Alle Relays getrennt');
+        } catch (error) {
+            console.error('❌ Fehler beim Trennen der Relays:', error);
+        }
     }
 }
+
+export default RelayService;

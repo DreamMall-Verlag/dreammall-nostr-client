@@ -2,8 +2,7 @@
 // NOSTR Service - Core NOSTR Protocol Operations
 // =================================================================
 
-import { SimplePool, getEventHash, getPublicKey, finalizeEvent } from 'nostr-tools';
-import { nip04 } from 'nostr-tools';
+import { SimplePool, getEventHash, getPublicKey, finalizeEvent, nip04 } from 'nostr-tools';
 
 export class NostrService {
     constructor() {
@@ -23,16 +22,40 @@ export class NostrService {
         this.relayService = services.relay;
     }
 
-    async init(keyPair = null) {
-        this.keyPair = keyPair;
+    async init(currentUser = null) {
+        console.log('🔧 Initialisiere NOSTR Service mit:', currentUser);
+        
+        if (currentUser) {
+            // Convert KeyService format to nostr-tools format
+            this.keyPair = {
+                pubkey: currentUser.publicKey,
+                privkey: currentUser.nsec ? 
+                    new Uint8Array(currentUser.secretKey || []) : 
+                    new Uint8Array(currentUser.privateKey || []),
+                npub: currentUser.npub,
+                nsec: currentUser.nsec
+            };
+            
+            // If we have secretKey as array, convert it
+            if (currentUser.secretKey && Array.isArray(currentUser.secretKey)) {
+                this.keyPair.privkey = new Uint8Array(currentUser.secretKey);
+            }
+            
+            console.log('🔑 KeyPair erstellt:', {
+                pubkey: this.keyPair.pubkey,
+                privkeyLength: this.keyPair.privkey?.length,
+                npub: this.keyPair.npub
+            });
+        }
+        
         this.pool = new SimplePool();
         
         // Load user profile if keyPair is available
-        if (keyPair) {
+        if (this.keyPair) {
             await this.loadUserProfile();
         }
         
-        console.log('✅ NOSTR Service initialisiert');
+        console.log('✅ NOSTR Service initialisiert', this.keyPair ? 'mit Schlüsseln' : 'ohne Schlüssel');
     }
 
     async loadUserProfile() {
@@ -208,7 +231,7 @@ export class NostrService {
         }
     }
 
-    subscribeToRoom(roomId) {
+    subscribeToRoom(roomId, callback = null) {
         if (!this.pool || !this.relayService) {
             console.warn('NOSTR Service nicht bereit für Subscriptions');
             return;
@@ -220,25 +243,45 @@ export class NostrService {
             return;
         }
 
+        console.log(`📡 Abonniere Raum: ${roomId} mit ${relayUrls.length} Relays`);
+
         // Unsubscribe from previous room
         if (this.subscriptions.has('room')) {
-            this.subscriptions.get('room').unsub();
+            const existingSubscription = this.subscriptions.get('room');
+            if (existingSubscription && typeof existingSubscription.unsub === 'function') {
+                existingSubscription.unsub();
+                console.log('📡 Vorherige Subscription beendet');
+            }
+            this.subscriptions.delete('room');
         }
 
         // Subscribe to room messages
-        const subscription = this.pool.sub(relayUrls, [{
-            kinds: [1],
-            '#t': [roomId],
+        const subscription = this.pool.subscribeMany(relayUrls, [{
+            kinds: [1], // Text notes
+            '#t': [roomId], // Room tag
             since: Math.floor(Date.now() / 1000) - (24 * 60 * 60), // Last 24 hours
             limit: 100
-        }]);
-
-        subscription.on('event', (event) => {
-            this.handleRoomMessage(event, roomId);
+        }], {
+            onevent: (event) => {
+                console.log(`📨 Event erhalten für Raum ${roomId}:`, event);
+                if (callback) {
+                    callback(event);
+                } else {
+                    this.handleRoomMessage(event, roomId);
+                }
+            },
+            oneose: () => {
+                console.log(`📡 Subscription für Raum ${roomId} beendet`);
+            },
+            onclose: () => {
+                console.log(`📡 Subscription für Raum ${roomId} geschlossen`);
+            }
         });
 
         this.subscriptions.set('room', subscription);
-        console.log(`📡 Abonniert Raum: ${roomId}`);
+        console.log(`✅ Erfolgreich Raum abonniert: ${roomId}`);
+        
+        return subscription;
     }
 
     subscribeToDirectMessages() {
@@ -254,19 +297,85 @@ export class NostrService {
         }
 
         // Subscribe to direct messages
-        const subscription = this.pool.sub(relayUrls, [{
+        const subscription = this.pool.subscribeMany(relayUrls, [{
             kinds: [4],
             '#p': [this.keyPair.pubkey],
             since: Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60), // Last 7 days
             limit: 100
-        }]);
-
-        subscription.on('event', (event) => {
-            this.handleDirectMessage(event);
+        }], {
+            onevent: (event) => {
+                this.handleDirectMessage(event);
+            },
+            oneose: () => {
+                console.log('📧 Direct Messages Subscription beendet');
+            }
         });
 
         this.subscriptions.set('dm', subscription);
         console.log('📧 Abonniert direkte Nachrichten');
+    }
+
+    loadRoomMessages(roomId, callback) {
+        if (!this.pool || !this.relayService) {
+            console.warn('NOSTR Service nicht bereit für loadRoomMessages');
+            return;
+        }
+
+        const relayUrls = this.relayService.getConnectedRelays();
+        if (relayUrls.length === 0) {
+            console.warn('Keine Relay-Verbindungen für loadRoomMessages');
+            return;
+        }
+
+        console.log(`📚 Lade Nachrichten für Raum: ${roomId}`);
+
+        const messages = [];
+        
+        // Temporary subscription to load historical messages
+        const tempSub = this.pool.subscribeMany(relayUrls, [{
+            kinds: [1], // Text notes
+            '#t': [roomId], // Room tag
+            since: Math.floor(Date.now() / 1000) - (24 * 60 * 60), // Last 24 hours
+            limit: 100
+        }], {
+            onevent: (event) => {
+                console.log(`📨 Historische Nachricht erhalten für Raum ${roomId}:`, event);
+                
+                // Check if this is our own message
+                const isOwnMessage = this.keyPair && event.pubkey === this.keyPair.pubkey;
+                
+                messages.push({
+                    id: event.id,
+                    content: event.content,
+                    pubkey: event.pubkey,
+                    created_at: event.created_at,
+                    isOwn: isOwnMessage
+                });
+            },
+            oneose: () => {
+                console.log(`📚 Historische Nachrichten für Raum ${roomId} geladen: ${messages.length} Nachrichten`);
+                
+                // Sort messages by timestamp (oldest first - ascending order)
+                messages.sort((a, b) => a.created_at - b.created_at);
+                
+                console.log('📅 Nachrichten-Zeitstempel sortiert:', messages.map(m => ({
+                    content: m.content.slice(0, 20),
+                    created_at: m.created_at,
+                    date: new Date(m.created_at * 1000).toLocaleString()
+                })));
+                
+                // Close temporary subscription
+                tempSub.unsub();
+                
+                // Call callback with sorted messages
+                if (callback) {
+                    callback(messages);
+                }
+            },
+            onclose: () => {
+                console.log(`📚 Historische Nachrichten-Subscription für Raum ${roomId} geschlossen`);
+            }
+        });
     }
 
     async handleRoomMessage(event, roomId) {
@@ -418,14 +527,26 @@ export class NostrService {
     disconnect() {
         // Close all subscriptions
         for (const [key, subscription] of this.subscriptions) {
-            subscription.unsub();
+            try {
+                if (subscription && typeof subscription.unsub === 'function') {
+                    subscription.unsub();
+                    console.log(`📡 Subscription ${key} beendet`);
+                }
+            } catch (error) {
+                console.error(`❌ Fehler beim Beenden der Subscription ${key}:`, error);
+            }
         }
         this.subscriptions.clear();
 
         // Close pool
         if (this.pool) {
-            this.pool.close();
-            this.pool = null;
+            try {
+                this.pool.close();
+                this.pool = null;
+                console.log('🔌 NOSTR Pool geschlossen');
+            } catch (error) {
+                console.error('❌ Fehler beim Schließen des Pools:', error);
+            }
         }
 
         console.log('🔌 NOSTR Service getrennt');

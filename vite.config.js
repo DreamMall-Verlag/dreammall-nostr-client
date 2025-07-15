@@ -4,7 +4,7 @@ import legacy from '@vitejs/plugin-legacy';
 
 export default defineConfig({
   root: '.',
-  base: './',
+  base: '/', // GitHub Pages base path is always root
   
   // Build configuration
   build: {

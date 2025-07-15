@@ -1,102 +1,314 @@
-console.log('🚀 DreamMall NOSTR wird geladen...');
+// =================================================================
+// DreamMall NOSTR Client - Main Application (Component-based)
+// Following NOSTR NIPs: NIP-01, NIP-17, NIP-28, NIP-65
+// =================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('✅ DOM geladen');
-    
-    const app = document.getElementById('app');
-    app.innerHTML = `
-        <div class="app">
-            <div class="header">
-                <h1>💬 DreamMall NOSTR</h1>
-                <div class="status">
-                    <div class="status-dot offline" id="status-dot"></div>
-                    <span id="status-text">Getrennt</span>
-                </div>
-            </div>
+import { KeyService } from './services/KeyService.js';
+import { NostrService } from './services/NostrService.js';
+import { RelayService } from './services/RelayService.js';
+import { StorageService } from './services/StorageService.js';
+import { ToastService } from './services/ToastService.js';
+
+import { HeaderComponent } from './components/HeaderComponent.js';
+import { SetupComponent } from './components/SetupComponent.js';
+import { ChatComponent } from './components/ChatComponent.js';
+import { SettingsModal } from './components/SettingsModal.js';
+import { RelayManager } from './components/RelayManager.js';
+
+console.log('🚀 DreamMall NOSTR Client startet...');
+
+// =================================================================
+// Application Class
+// =================================================================
+
+class NostrApp {
+    constructor() {
+        this.services = {};
+        this.components = {};
+        this.currentScreen = 'setup';
+        this.isInitialized = false;
+    }
+
+    async init() {
+        try {
+            console.log('🔧 Initialisiere Services...');
+            await this.initializeServices();
             
-            <div class="setup" id="setup">
-                <h2>🔐 Willkommen zu DreamMall NOSTR</h2>
-                <p>Richten Sie Ihren sicheren Chat ein</p>
-                <div class="setup-buttons">
-                    <button class="btn btn-primary" id="create-btn">✨ Neue Schlüssel erstellen</button>
-                    <button class="btn btn-secondary" id="import-btn">📥 Schlüssel importieren</button>
-                </div>
-            </div>
+            console.log('🎨 Erstelle UI-Komponenten...');
+            this.createComponents();
             
-            <div class="main hidden" id="main">
-                <div class="sidebar">
-                    <div class="sidebar-header">
-                        <h3>Chat-Räume</h3>
-                        <button class="btn btn-sm">+</button>
-                    </div>
-                    <div class="rooms">
-                        <div class="room active">
-                            <div class="room-name">Allgemein</div>
-                            <div class="room-status">Online</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="chat">
-                    <div class="chat-header">
-                        <h3>Allgemein</h3>
-                        <button class="btn btn-sm">🔒</button>
-                    </div>
-                    
-                    <div class="messages" id="messages">
-                        <div class="welcome">
-                            <h3>Willkommen im Chat! 🎉</h3>
-                            <p>Ihre Nachrichten werden Ende-zu-Ende verschlüsselt.</p>
-                        </div>
-                    </div>
-                    
-                    <div class="input-area">
-                        <div class="input-container">
-                            <input type="text" id="input" placeholder="Nachricht eingeben...">
-                            <button class="btn btn-primary" id="send">📤</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.getElementById('create-btn').addEventListener('click', () => {
-        console.log('🔑 Schlüssel erstellen');
-        document.getElementById('setup').classList.add('hidden');
-        document.getElementById('main').classList.remove('hidden');
-        document.getElementById('status-dot').classList.replace('offline', 'online');
-        document.getElementById('status-text').textContent = 'Verbunden';
-    });
-    
-    document.getElementById('import-btn').addEventListener('click', () => {
-        alert('Import wird implementiert...');
-    });
-    
-    const sendMessage = () => {
-        const input = document.getElementById('input');
-        const message = input.value.trim();
-        if (message) {
-            const messages = document.getElementById('messages');
-            const welcome = messages.querySelector('.welcome');
-            if (welcome) welcome.remove();
+            console.log('⚡ Richte Event-Listeners ein...');
+            this.setupEventListeners();
             
-            const msg = document.createElement('div');
-            msg.className = 'message user';
-            msg.innerHTML = `
-                <div class="message-text">${message}</div>
-                <div class="message-time">${new Date().toLocaleTimeString()}</div>
-            `;
-            messages.appendChild(msg);
-            messages.scrollTop = messages.scrollHeight;
-            input.value = '';
+            console.log('📱 Bestimme initialen Zustand...');
+            await this.determineInitialState();
+            
+            this.isInitialized = true;
+            console.log('✅ App erfolgreich initialisiert!');
+            
+        } catch (error) {
+            console.error('❌ App-Initialisierung fehlgeschlagen:', error);
+            this.services.toastService?.showError('Fehler beim Starten der App');
         }
-    };
+    }
+
+    async initializeServices() {
+        // Initialize services in correct order
+        this.services.storageService = new StorageService();
+        this.services.toastService = new ToastService();
+        this.services.keyService = new KeyService(this.services.storageService);
+        this.services.relayService = new RelayService(this.services.storageService);
+        this.services.nostrService = new NostrService();
+        
+        // Set up service dependencies
+        this.services.nostrService.setRelayService(this.services.relayService);
+        
+        // Initialize services
+        await this.services.keyService.init?.();
+        await this.services.relayService.init?.();
+        
+        console.log('✅ Services initialisiert');
+    }
+
+    createComponents() {
+        const app = document.getElementById('app');
+        
+        // Create main app container
+        const appContainer = document.createElement('div');
+        appContainer.className = 'app';
+        app.appendChild(appContainer);
+        
+        // Create header
+        this.components.header = new HeaderComponent();
+        appContainer.appendChild(this.components.header.render());
+        
+        // Create main content area
+        const mainContent = document.createElement('div');
+        mainContent.id = 'mainContent';
+        appContainer.appendChild(mainContent);
+        
+        // Create setup component
+        this.components.setup = new SetupComponent(
+            this.services.keyService, 
+            this.services.toastService
+        );
+        
+        // Create chat component
+        this.components.chat = new ChatComponent(
+            this.services.nostrService,
+            this.services.toastService
+        );
+        
+        // Create modals
+        this.components.settingsModal = new SettingsModal(
+            this.services.keyService,
+            this.services.toastService
+        );
+        
+        this.components.relayManager = new RelayManager(
+            this.services.relayService,
+            this.services.toastService
+        );
+        
+        // Append modals to body
+        document.body.appendChild(this.components.settingsModal.render());
+        document.body.appendChild(this.components.relayManager.render());
+        
+        // Set global reference for relay manager
+        window.relayManager = this.components.relayManager;
+        
+        console.log('✅ Komponenten erstellt');
+    }
+
+    setupEventListeners() {
+        // Listen for key events
+        document.addEventListener('keysGenerated', (e) => {
+            console.log('🔑 Schlüssel generiert');
+            this.showScreen('chat');
+        });
+        
+        document.addEventListener('keysImported', (e) => {
+            console.log('📥 Schlüssel importiert');
+            this.showScreen('chat');
+        });
+        
+        document.addEventListener('keysDeleted', (e) => {
+            console.log('🗑️ Schlüssel gelöscht');
+            this.showScreen('setup');
+        });
+        
+        // Listen for UI events
+        document.addEventListener('showSettings', () => {
+            this.components.settingsModal.show();
+        });
+        
+        document.addEventListener('showRelays', () => {
+            this.components.relayManager.show();
+        });
+        
+        console.log('✅ Event-Listeners eingerichtet');
+    }
+
+    async determineInitialState() {
+        try {
+            const hasKeys = await this.services.keyService.hasKeys();
+            
+            if (hasKeys) {
+                console.log('🔑 Bestehende Schlüssel gefunden');
+                this.showScreen('chat');
+            } else {
+                console.log('🆕 Keine Schlüssel gefunden, zeige Setup');
+                this.showScreen('setup');
+            }
+        } catch (error) {
+            console.error('❌ Fehler beim Bestimmen des initialen Zustands:', error);
+            this.showScreen('setup');
+        }
+    }
+
+    showScreen(screenName) {
+        const mainContent = document.getElementById('mainContent');
+        if (!mainContent) return;
+        
+        // Clear current content
+        mainContent.innerHTML = '';
+        
+        // Hide/show header controls
+        if (screenName === 'chat') {
+            this.components.header.showControls();
+            this.components.header.updateStatus(true);
+        } else {
+            this.components.header.hideControls();
+            this.components.header.updateStatus(false);
+        }
+        
+        // Show appropriate screen
+        switch (screenName) {
+            case 'setup':
+                mainContent.appendChild(this.components.setup.render());
+                break;
+                
+            case 'chat':
+                mainContent.appendChild(this.components.chat.render());
+                this.initializeChat();
+                break;
+                
+            default:
+                console.warn('⚠️ Unbekannter Screen:', screenName);
+                this.showScreen('setup');
+        }
+        
+        this.currentScreen = screenName;
+        console.log(`📱 Screen gewechselt zu: ${screenName}`);
+    }
+
+    async initializeChat() {
+        try {
+            console.log('🚀 Beginne Chat-Initialisierung...');
+            
+            // Get current user
+            const currentUser = await this.services.keyService.getCurrentUser();
+            console.log('👤 Aktueller Benutzer:', currentUser);
+            
+            if (!currentUser) {
+                throw new Error('Kein aktueller Benutzer gefunden');
+            }
+            
+            // Initialize NOSTR service with keys
+            console.log('🔧 Initialisiere NOSTR Service...');
+            await this.services.nostrService.init(currentUser);
+            
+            // Connect to relays
+            console.log('🌐 Verbinde zu Relays...');
+            await this.services.relayService.connect();
+            
+            // Update status
+            this.components.header.updateStatus(true);
+            
+            console.log('💬 Chat erfolgreich initialisiert!');
+            this.services.toastService.showSuccess('Mit NOSTR-Netzwerk verbunden!');
+            
+        } catch (error) {
+            console.error('❌ Chat-Initialisierung fehlgeschlagen:', error);
+            this.services.toastService.showError('Fehler beim Verbinden mit NOSTR');
+            
+            // Show detailed error for debugging
+            console.error('💥 Detaillierter Fehler:', {
+                message: error.message,
+                stack: error.stack,
+                services: Object.keys(this.services),
+                keyService: !!this.services.keyService,
+                nostrService: !!this.services.nostrService,
+                relayService: !!this.services.relayService
+            });
+        }
+    }
+
+    destroy() {
+        // Clean up components
+        Object.values(this.components).forEach(component => {
+            component.destroy?.();
+        });
+        
+        // Clean up services
+        Object.values(this.services).forEach(service => {
+            service.destroy?.();
+        });
+        
+        console.log('🧹 App bereinigt');
+    }
+}
+
+// =================================================================
+// Application Initialization
+// =================================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('📱 DOM geladen, starte App...');
     
-    document.getElementById('send').addEventListener('click', sendMessage);
-    document.getElementById('input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-    
-    console.log('✅ App geladen');
+    try {
+        const app = new NostrApp();
+        await app.init();
+        
+        // Make app globally available for debugging
+        window.nostrApp = app;
+        
+        console.log('🎉 DreamMall NOSTR Client bereit!');
+        
+    } catch (error) {
+        console.error('💥 Kritischer Fehler beim Starten:', error);
+        
+        // Fallback error display
+        const app = document.getElementById('app');
+        if (app) {
+            app.innerHTML = `
+                <div class="app">
+                    <div class="header">
+                        <h1>❌ Fehler</h1>
+                    </div>
+                    <div class="setup">
+                        <h2>Anwendung konnte nicht gestartet werden</h2>
+                        <p>Bitte laden Sie die Seite neu oder überprüfen Sie die Konsole für Details.</p>
+                        <button class="btn btn-primary" onclick="location.reload()">
+                            🔄 Seite neu laden
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
 });
+
+// =================================================================
+// Global Error Handler
+// =================================================================
+
+window.addEventListener('error', (event) => {
+    console.error('🚨 Globaler Fehler:', event.error);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('🚨 Unhandled Promise Rejection:', event.reason);
+});
+
+console.log('📋 App-Skript geladen');

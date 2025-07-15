@@ -295,6 +295,316 @@ body {
     display: none !important;
 }
 
+/* Key Info Screen */
+.key-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    text-align: center;
+}
+
+.key-info h2 {
+    font-size: 32px;
+    margin-bottom: 16px;
+    color: #333;
+}
+
+.key-info p {
+    font-size: 18px;
+    color: #666;
+    margin-bottom: 32px;
+}
+
+.key-info code {
+    background: #f8f9fa;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #667eea;
+}
+
+.key-actions {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.key-continue {
+    margin-top: 20px;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.key-display {
+    margin-bottom: 20px;
+}
+
+.key-display h3 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.key-item {
+    margin-bottom: 16px;
+}
+
+.key-item label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+}
+
+.key-item input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14px;
+    background: #f8f9fa;
+}
+
+.key-item input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.key-item small {
+    display: block;
+    margin-top: 4px;
+    color: #dc3545;
+    font-size: 12px;
+}
+
+/* Danger Button */
+.btn-danger {
+    background: #dc3545;
+    color: white;
+    border: none;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+}
+
+/* Chat Controls */
+.chat-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Settings Modal */
+.settings-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+}
+
+.settings-section h4 {
+    margin-bottom: 16px;
+    color: #333;
+    font-size: 16px;
+}
+
+.key-info-display {
+    margin-bottom: 16px;
+}
+
+.key-display-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.key-display-item code {
+    flex: 1;
+    background: #f8f9fa;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #667eea;
+    word-break: break-all;
+}
+
+.settings-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.setting-item label {
+    min-width: 80px;
+    font-weight: 600;
+    color: #333;
+}
+
+.setting-item select {
+    padding: 8px 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+    background: white;
+    color: #333;
+}
+
+/* Relay Management */
+.relay-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.relay-section:last-child {
+    border-bottom: none;
+}
+
+.relay-section h4 {
+    margin-bottom: 16px;
+    color: #333;
+    font-size: 16px;
+}
+
+.relay-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
+
+.relay-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.relay-item:last-child {
+    border-bottom: none;
+}
+
+.relay-info {
+    flex: 1;
+}
+
+.relay-url {
+    display: block;
+    font-family: monospace;
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.relay-status {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.relay-status.connected {
+    color: #28a745;
+}
+
+.relay-status.disconnected {
+    color: #dc3545;
+}
+
+.relay-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.add-relay-form {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.add-relay-form input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.relay-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e1e5e9;
+}
+
+.stat-item span:first-child {
+    font-weight: 600;
+    color: #333;
+}
+
+.stat-item span:last-child {
+    font-weight: 700;
+    color: #667eea;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e1e5e9;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .app {
@@ -319,5 +629,23 @@ body {
     
     .message {
         max-width: 90%;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+        margin: 20px;
+    }
+    
+    .settings-actions {
+        flex-direction: column;
+    }
+    
+    .relay-actions {
+        flex-direction: column;
+    }
+    
+    .add-relay-form {
+        flex-direction: column;
     }
 }
