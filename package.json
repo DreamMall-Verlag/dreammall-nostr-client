@@ -23,7 +23,6 @@
     "stream-browserify": "^3.0.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-legacy": "^5.0.0",
     "@vitest/ui": "^1.0.0",
     "eslint": "^8.55.0",
     "gh-pages": "^6.3.0",
