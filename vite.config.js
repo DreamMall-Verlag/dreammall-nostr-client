@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: '.',
-  base: '/', // Lokale Entwicklung ohne base path
+  base: '/dreammall-nostr-client/', // GitHub Pages base URL
   
   // Global polyfills
   define: {
