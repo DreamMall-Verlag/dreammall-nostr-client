@@ -63,8 +63,9 @@ npm run preview
 
 **🔧 Technical Improvements:**
 - Vite 4.5.0 with environment-aware base URL configuration
-- Fixed nostr-tools compatibility with proper service initialization
+- NIP-28 (Public Chat) and NIP-04 (Encrypted DMs) implementation
 - Enhanced error handling and retry logic
+- Stable relay connection (wss://relay.damus.io)
 
 **🐛 Bug Fixes:**
 - Fixed room message counting and display issues
@@ -76,6 +77,7 @@ npm run preview
 - GitHub Pages deployment working
 - Optimized build configuration for static hosting
 - Fixed base URL conflicts between local and production environments
+- Improved NOSTR protocol compliance
 
 ## 🏗️ Architecture
 
@@ -99,11 +101,12 @@ src/
 
 ### NOSTR Protocol
 
-Implements basic NOSTR protocol (NIP-01) with:
-- Key generation and import
-- Real-time messaging
-- Multi-room support
-- Relay connections
+Implements NOSTR protocol with:
+- **NIP-01**: Basic protocol (key generation, messaging)
+- **NIP-28**: Public chat rooms with hashtag support
+- **NIP-04**: Encrypted direct messages
+- Multi-relay support (primary: wss://relay.damus.io)
+- Real-time message synchronization
 
 ## 🔧 Development
 

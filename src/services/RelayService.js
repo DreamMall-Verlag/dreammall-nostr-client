@@ -9,7 +9,8 @@ export class RelayService {
         this.nostrService = null;
         this.connectionState = 'disconnected';
         this.defaultRelays = [
-            'wss://relay.damus.io'  // Nur ein zuverlässiges Relay für Tests
+            'wss://relay.damus.io'               // Primary: Damus (sehr stabil, Cloudflare)
+            // Weitere Relays werden später hinzugefügt, wenn sie getestet sind
         ];
     }
 

@@ -91,7 +91,7 @@ export class NostrService {
         return this.userProfile;
     }
 
-    async sendMessage(content, roomId, encrypted = true) {
+    async sendMessage(content, roomId, encrypted = false) {
         if (!this.keyPair) {
             throw new Error('NOSTR Service nicht initialisiert - keine Schlüssel');
         }
@@ -106,24 +106,15 @@ export class NostrService {
                 throw new Error('Keine Relay-Verbindungen verfügbar');
             }
 
-            let messageContent = content;
-            
-            // For room messages, we'll use a different approach than direct encryption
-            // since this is a public room message
-            if (encrypted && roomId) {
-                // For now, just mark as encrypted but don't actually encrypt room messages
-                // Real encryption would need recipient public keys
-                messageContent = content;
-            }
-
+            // NIP-28: Public Chat - Room messages are public by design
             const event = {
-                kind: 1, // Text note
+                kind: 1, // Text note (NIP-01)
                 created_at: Math.floor(Date.now() / 1000),
                 tags: [
-                    ['t', roomId], // Room tag
+                    ['t', roomId], // NIP-28: Room tag for public chat
                     ['client', 'dreammall-nostr']
                 ],
-                content: messageContent,
+                content: content, // Public room messages are not encrypted
                 pubkey: this.keyPair.pubkey
             };
 
@@ -131,7 +122,7 @@ export class NostrService {
             const signedEvent = finalizeEvent(event, this.keyPair.privkey);
 
             // Publish to relays
-            console.log('📤 Publiziere Event:', signedEvent);
+            console.log('📤 Publiziere NIP-28 Public Chat Event:', signedEvent);
             await this.pool.publish(relayUrls, signedEvent);
 
             // Return message object for UI
@@ -142,12 +133,81 @@ export class NostrService {
                 authorPubkey: this.keyPair.pubkey,
                 timestamp: signedEvent.created_at * 1000,
                 roomId: roomId,
-                encrypted: encrypted,
+                encrypted: false, // Public chat messages are not encrypted
                 isOwn: true
             };
 
         } catch (error) {
             console.error('❌ Fehler beim Senden der Nachricht:', error);
+            throw error;
+        }
+    }
+
+    async sendDirectMessage(content, recipientPubkey, encrypted = true) {
+        if (!this.keyPair) {
+            throw new Error('NOSTR Service nicht initialisiert - keine Schlüssel');
+        }
+
+        try {
+            // Get relay URLs from RelayService
+            const relayUrls = this.relayService?.getConnectedRelays() || this.relayService?.defaultRelays || ['wss://relay.damus.io'];
+            
+            console.log('📡 Sende verschlüsselte DM an Relays:', relayUrls);
+            
+            if (relayUrls.length === 0) {
+                throw new Error('Keine Relay-Verbindungen verfügbar');
+            }
+
+            let messageContent = content;
+            
+            // NIP-04: Encrypted Direct Messages
+            if (encrypted) {
+                try {
+                    // Import NIP-04 encryption functions
+                    const { encrypt } = await import('nostr-tools/nip04');
+                    
+                    // Encrypt the message content
+                    messageContent = await encrypt(this.keyPair.privkey, recipientPubkey, content);
+                    console.log('🔐 Nachricht verschlüsselt mit NIP-04');
+                } catch (encryptError) {
+                    console.error('❌ Verschlüsselung fehlgeschlagen:', encryptError);
+                    throw new Error('Nachricht konnte nicht verschlüsselt werden');
+                }
+            }
+
+            const event = {
+                kind: 4, // NIP-04: Encrypted Direct Message
+                created_at: Math.floor(Date.now() / 1000),
+                tags: [
+                    ['p', recipientPubkey], // NIP-04: Recipient tag
+                    ['client', 'dreammall-nostr']
+                ],
+                content: messageContent,
+                pubkey: this.keyPair.pubkey
+            };
+
+            // Sign the event
+            const signedEvent = finalizeEvent(event, this.keyPair.privkey);
+
+            // Publish to relays
+            console.log('📤 Publiziere NIP-04 Encrypted DM Event:', signedEvent);
+            await this.pool.publish(relayUrls, signedEvent);
+
+            // Return message object for UI
+            return {
+                id: signedEvent.id,
+                content: content, // Return decrypted content for UI
+                author: this.userProfile?.name || 'DreamMall User',
+                authorPubkey: this.keyPair.pubkey,
+                recipientPubkey: recipientPubkey,
+                timestamp: signedEvent.created_at * 1000,
+                encrypted: encrypted,
+                isOwn: true,
+                isDM: true
+            };
+
+        } catch (error) {
+            console.error('❌ Fehler beim Senden der verschlüsselten DM:', error);
             throw error;
         }
     }
@@ -233,15 +293,15 @@ export class NostrService {
             this.subscriptions.delete('room');
         }
 
-        // Subscribe to room messages
+        // NIP-28: Subscribe to public chat messages
         const subscription = this.pool.subscribeMany(relayUrls, [{
-            kinds: [1], // Text notes
-            '#t': [roomId], // Room tag
+            kinds: [1], // NIP-01: Text notes for public chat
+            '#t': [roomId], // NIP-28: Room hashtag tag
             since: Math.floor(Date.now() / 1000) - (24 * 60 * 60), // Last 24 hours
             limit: 100
         }], {
             onevent: (event) => {
-                console.log(`📨 Event erhalten für Raum ${roomId}:`, event);
+                console.log(`📨 NIP-28 Event erhalten für Raum ${roomId}:`, event);
                 if (callback) {
                     callback(event);
                 } else {
@@ -249,10 +309,10 @@ export class NostrService {
                 }
             },
             oneose: () => {
-                console.log(`📡 Subscription für Raum ${roomId} beendet`);
+                console.log(`📡 NIP-28 Subscription für Raum ${roomId} beendet`);
             },
             onclose: () => {
-                console.log(`📡 Subscription für Raum ${roomId} geschlossen`);
+                console.log(`📡 NIP-28 Subscription für Raum ${roomId} geschlossen`);
             }
         });
 
@@ -264,7 +324,7 @@ export class NostrService {
 
     subscribeToDirectMessages() {
         if (!this.pool || !this.keyPair) {
-            console.warn('NOSTR Service nicht bereit für DM Subscriptions');
+            console.warn('NOSTR Service oder Schlüssel nicht bereit für DM Subscriptions');
             return;
         }
 
@@ -276,29 +336,60 @@ export class NostrService {
             return;
         }
 
-        // Subscribe to direct messages
+        console.log(`📡 Abonniere verschlüsselte DMs mit ${relayUrls.length} Relays:`, relayUrls);
+
+        // Unsubscribe from previous DM subscription
+        if (this.subscriptions.has('dm')) {
+            const existingSubscription = this.subscriptions.get('dm');
+            if (existingSubscription && typeof existingSubscription.unsub === 'function') {
+                existingSubscription.unsub();
+                console.log('📡 Vorherige DM Subscription beendet');
+            }
+            this.subscriptions.delete('dm');
+        }
+
+        // NIP-04: Subscribe to encrypted direct messages
         const subscription = this.pool.subscribeMany(relayUrls, [{
-            kinds: [4],
-            '#p': [this.keyPair.pubkey],
-            since: Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60), // Last 7 days
-            limit: 100
+            kinds: [4], // NIP-04: Encrypted Direct Message
+            '#p': [this.keyPair.pubkey], // Messages sent to us
+            since: Math.floor(Date.now() / 1000) - (24 * 60 * 60), // Last 24 hours
+            limit: 50
         }], {
             onevent: (event) => {
+                console.log(`📨 Verschlüsselte DM erhalten:`, event);
                 this.handleDirectMessage(event);
             },
             oneose: () => {
-                console.log('📧 Direct Messages Subscription beendet');
+                console.log(`📡 DM Subscription beendet`);
+            },
+            onclose: () => {
+                console.log(`📡 DM Subscription geschlossen`);
             }
         });
 
         this.subscriptions.set('dm', subscription);
-        console.log('📧 Abonniert direkte Nachrichten');
+        console.log(`✅ Erfolgreich verschlüsselte DMs abonniert`);
+        
+        return subscription;
     }
 
     async handleRoomMessage(event, roomId) {
         try {
             // Skip own messages
             if (event.pubkey === this.keyPair.pubkey) {
+                return;
+            }
+
+            // NIP-28: Verify this is a public chat message
+            if (event.kind !== 1) {
+                console.log('Ignoriere Event - nicht NIP-28 Text Note (kind 1)');
+                return;
+            }
+
+            // Verify room tag
+            const roomTags = event.tags.filter(tag => tag[0] === 't' && tag[1] === roomId);
+            if (roomTags.length === 0) {
+                console.log('Ignoriere Event - kein matching room tag für:', roomId);
                 return;
             }
 
@@ -312,9 +403,11 @@ export class NostrService {
                 authorPubkey: event.pubkey,
                 timestamp: event.created_at * 1000,
                 roomId: roomId,
-                encrypted: false,
+                encrypted: false, // NIP-28 messages are public
                 isOwn: false
             };
+
+            console.log('📨 NIP-28 Public Chat Message verarbeitet:', message);
 
             // Dispatch custom event for UI
             document.dispatchEvent(new CustomEvent('newMessage', {
@@ -322,7 +415,7 @@ export class NostrService {
             }));
 
         } catch (error) {
-            console.error('❌ Fehler beim Verarbeiten der Raum-Nachricht:', error);
+            console.error('❌ Fehler beim Verarbeiten der NIP-28 Raum-Nachricht:', error);
         }
     }
 
@@ -336,13 +429,15 @@ export class NostrService {
             let content = event.content;
             let encrypted = false;
 
-            // Try to decrypt if it's encrypted
+            // NIP-04: Try to decrypt if it's encrypted
             try {
-                content = await nip04.decrypt(this.keyPair.privkey, event.pubkey, event.content);
+                const { decrypt } = await import('nostr-tools/nip04');
+                content = await decrypt(this.keyPair.privkey, event.pubkey, event.content);
                 encrypted = true;
+                console.log('🔓 NIP-04 Nachricht entschlüsselt');
             } catch (decryptError) {
                 // Content was not encrypted or decryption failed
-                console.log('Nachricht war nicht verschlüsselt oder Entschlüsselung fehlgeschlagen');
+                console.log('Nachricht war nicht verschlüsselt oder Entschlüsselung fehlgeschlagen:', decryptError);
             }
 
             // Get author info
