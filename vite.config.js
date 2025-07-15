@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: '.',
-  base: '/dreammall-nostr-client/', // GitHub Pages base URL
+  base: command === 'serve' ? '/' : '/dreammall-nostr-client/', // Lokal: '/', GitHub Pages: '/dreammall-nostr-client/'
   
   // Global polyfills
   define: {
@@ -52,4 +52,4 @@ export default defineConfig({
   optimizeDeps: {
     include: ['nostr-tools', 'buffer', 'crypto-browserify', 'stream-browserify']
   }
-});
+}));

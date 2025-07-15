@@ -40,11 +40,10 @@ export class SetupComponent {
 
     async handleGenerate() {
         try {
-            const password = prompt('Passwort für Schlüssel-Verschlüsselung:');
-            if (!password) return;
-
+            // Für jetzt ignorieren wir das Passwort und generieren einfach die Schlüssel
+            // Das Passwort-Feature kann später implementiert werden
             this.toastService.showInfo('Generiere Schlüssel...');
-            const keys = await this.keyService.generateKeys(password);
+            const keys = await this.keyService.generateKeyPair();
             
             this.toastService.showSuccess('Schlüssel erfolgreich generiert!');
             this.dispatchEvent('keysGenerated', { keys });
@@ -59,11 +58,8 @@ export class SetupComponent {
             const privateKey = prompt('Privater Schlüssel (nsec... oder hex):');
             if (!privateKey) return;
 
-            const password = prompt('Passwort für Schlüssel-Verschlüsselung:');
-            if (!password) return;
-
             this.toastService.showInfo('Importiere Schlüssel...');
-            await this.keyService.importKeys(privateKey, password);
+            await this.keyService.importKeys(privateKey);
             
             this.toastService.showSuccess('Schlüssel erfolgreich importiert!');
             this.dispatchEvent('keysImported');
