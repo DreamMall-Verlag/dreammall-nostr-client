@@ -2,7 +2,12 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: '.',
-  base: '/',
+  base: '/', // Lokale Entwicklung ohne base path
+  
+  // Global polyfills
+  define: {
+    'global': 'globalThis', // Polyfill für Node.js-Umgebungen
+  },
   
   // Build configuration
   build: {
@@ -10,11 +15,28 @@ export default defineConfig({
     assetsDir: 'assets',
     emptyOutDir: true,
     sourcemap: false,
-    minify: 'terser',
+    minify: false, // Deaktiviere Minifizierung für Debugging
     target: 'es2022',
     rollupOptions: {
       input: {
         main: './index.html'
+      },
+      output: {
+        manualChunks: {
+          'nostr-tools': ['nostr-tools'], // Isoliere nostr-tools in eigenem Chunk
+        },
+      },
+      // Erweiterte Rollup-Optionen zur Fehlerbehebung
+      treeshake: {
+        moduleSideEffects: false,
+        propertyReadSideEffects: false,
+        tryCatchDeoptimization: false
+      },
+      // Deaktiviere aggressive Optimierungen
+      onwarn: (warning, warn) => {
+        if (warning.code === 'CIRCULAR_DEPENDENCY') return;
+        if (warning.code === 'EVAL') return;
+        warn(warning);
       }
     }
   },
@@ -40,12 +62,16 @@ export default defineConfig({
       '@': '/src',
       '@services': '/src/services',
       '@styles': '/src/styles',
-      '@utils': '/src/utils'
+      '@utils': '/src/utils',
+      // Polyfills für Node.js-Module
+      'buffer': 'buffer',
+      'crypto': 'crypto-browserify',
+      'stream': 'stream-browserify',
     }
   },
 
   // Optimization
   optimizeDeps: {
-    include: ['nostr-tools']
+    include: ['nostr-tools', 'buffer', 'crypto-browserify', 'stream-browserify']
   }
 });

@@ -160,12 +160,22 @@ export class ChatComponent {
         // Subscribe to messages using NIP-01 REQ for current room
         console.log(`🔔 Abonniere Nachrichten für Raum: ${this.currentRoom}`);
         
-        // Make sure NostrService is ready
-        if (!this.nostrService || !this.nostrService.pool) {
+        // Make sure NostrService is ready with better checking
+        if (!this.nostrService || !this.nostrService.pool || !this.nostrService.keyPair) {
             console.warn('⚠️ NostrService nicht bereit, verzögere Subscription...');
-            setTimeout(() => this.subscribeToMessages(), 1000);
+            // Try again in 2 seconds, but don't loop infinitely
+            if (!this.subscriptionRetries) this.subscriptionRetries = 0;
+            if (this.subscriptionRetries < 5) {
+                this.subscriptionRetries++;
+                setTimeout(() => this.subscribeToMessages(), 2000);
+            } else {
+                console.error('❌ NostrService konnte nicht initialisiert werden nach 5 Versuchen');
+            }
             return;
         }
+        
+        // Reset retry counter on successful connection
+        this.subscriptionRetries = 0;
         
         this.nostrService.subscribeToRoom(this.currentRoom, (event) => {
             console.log('📨 Nachricht erhalten in subscribeToMessages:', event);

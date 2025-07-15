@@ -57,11 +57,16 @@ class NostrApp {
         this.services.storageService = new StorageService();
         this.services.toastService = new ToastService();
         this.services.keyService = new KeyService(this.services.storageService);
-        this.services.relayService = new RelayService(this.services.storageService);
+        this.services.relayService = new RelayService();
         this.services.nostrService = new NostrService();
         
-        // Set up service dependencies
+        // Set up service dependencies AFTER all services are created
         this.services.nostrService.setRelayService(this.services.relayService);
+        this.services.relayService.setNostrService(this.services.nostrService);
+        
+        // Pass all services to each service
+        this.services.nostrService.setServices(this.services);
+        this.services.relayService.setServices(this.services);
         
         // Initialize services
         await this.services.keyService.init?.();
@@ -222,8 +227,15 @@ class NostrApp {
             console.log('🌐 Verbinde zu Relays...');
             await this.services.relayService.connect();
             
+            // Wait a bit for connections to establish
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Check connection status
+            const relayStatus = this.services.relayService.getStatus();
+            console.log('📊 Relay-Status:', relayStatus);
+            
             // Update status
-            this.components.header.updateStatus(true);
+            this.components.header.updateStatus(relayStatus.connectedRelays > 0);
             
             console.log('💬 Chat erfolgreich initialisiert!');
             this.services.toastService.showSuccess('Mit NOSTR-Netzwerk verbunden!');
