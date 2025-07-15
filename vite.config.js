@@ -15,30 +15,8 @@ export default defineConfig({
     assetsDir: 'assets',
     emptyOutDir: true,
     sourcemap: false,
-    minify: false, // Deaktiviere Minifizierung für Debugging
-    target: 'es2022',
-    rollupOptions: {
-      input: {
-        main: './index.html'
-      },
-      output: {
-        manualChunks: {
-          'nostr-tools': ['nostr-tools'], // Isoliere nostr-tools in eigenem Chunk
-        },
-      },
-      // Erweiterte Rollup-Optionen zur Fehlerbehebung
-      treeshake: {
-        moduleSideEffects: false,
-        propertyReadSideEffects: false,
-        tryCatchDeoptimization: false
-      },
-      // Deaktiviere aggressive Optimierungen
-      onwarn: (warning, warn) => {
-        if (warning.code === 'CIRCULAR_DEPENDENCY') return;
-        if (warning.code === 'EVAL') return;
-        warn(warning);
-      }
-    }
+    minify: true,
+    target: 'es2020',
   },
 
   // Development server
