@@ -262,21 +262,12 @@ export class ChatComponent {
             this.roomMessages.set(roomName, new Map());
         }
         
-        // Load messages from nostr service
-        this.nostrService.loadRoomMessages(roomName, (messages) => {
-            // Clear welcome message
-            messagesContainer.innerHTML = '';
-            
-            // Store messages in room-specific collection
-            const roomMessageMap = this.roomMessages.get(roomName);
-            messages.forEach(message => {
-                const messageId = message.id || message.pubkey + message.created_at;
-                roomMessageMap.set(messageId, message);
-            });
-            
-            // Render messages sorted by timestamp
-            this.renderMessagesInOrder(roomName);
-        });
+        // Load existing messages for the room (if any)
+        // Since we don't have loadRoomMessages(), we'll just clear and re-subscribe
+        messagesContainer.innerHTML = '';
+        
+        // Subscribe to room messages (this will load recent messages)
+        this.subscribeToRoom(roomName);
     }
 
     renderMessagesInOrder(roomName) {
