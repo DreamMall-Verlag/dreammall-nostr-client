@@ -59,6 +59,26 @@ npm run preview
 
 ## 🛠️ Recent Updates & Fixes
 
+### Version 1.0.1 (July 2025)
+
+**🔧 Technical Improvements:**
+- **npub Key Conversion**: Fixed compatibility with nostr-tools v2.15.0 API
+- **User Profile System**: Enhanced user profile modal with hex and npub key display
+- **Service Initialization**: Improved timing for NostrService initialization
+- **Multi-method Fallback**: Robust npub encoding with multiple fallback strategies
+
+**🎨 UI/UX Improvements:**
+- **Dezenter User-Icon**: First 4 hex characters displayed subtly next to user icon
+- **Enhanced Profile Modal**: Working npub conversion with copy functionality
+- **Better Error Handling**: Graceful degradation when npub conversion fails
+- **Improved Chat Layout**: Proper scrolling behavior with fixed input area
+
+**🐛 Bug Fixes:**
+- Fixed "encode is not a function" error in npub conversion
+- Resolved NostrService initialization timing issues
+- Fixed user profile modal showing conversion errors
+- Improved service dependency injection and initialization order
+
 ### Version 1.0.0 (July 2025)
 
 **🔧 Technical Improvements:**

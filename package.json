@@ -1,6 +1,6 @@
 {
   "name": "dreammall-nostr-web-client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DreamMall NOSTR Web Client - Production-ready NOSTR client with chat interface, key management, profile management, and relay management",
   "type": "module",
   "scripts": {
