@@ -466,9 +466,20 @@ export class NostrService {
     }
 
     async getAuthorName(pubkey) {
-        // For now, just return a shortened pubkey
-        // In a real implementation, you'd query for the author's profile
-        return `User ${pubkey.slice(0, 8)}...`;
+        // Try to get a more meaningful name for the author
+        try {
+            // First check if we have a profile for this pubkey
+            // For now, return a user-friendly identifier
+            const shortPubkey = pubkey.slice(0, 8);
+            
+            // Check if this is a known contact or if we can derive a better name
+            // In a real implementation, you'd query NIP-05 or profile metadata
+            return `User ${shortPubkey}`;
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Abrufen des Autornamens:', error);
+            return `User ${pubkey.slice(0, 8)}...`;
+        }
     }
 
     handleRelayEvent(relay, event) {

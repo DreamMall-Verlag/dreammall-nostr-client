@@ -440,14 +440,28 @@ export class ChatComponent {
         
         // Format timestamp
         const timestamp = new Date(messageData.created_at * 1000 || messageData.timestamp).toLocaleTimeString();
-        const pubkeyShort = messageData.pubkey ? messageData.pubkey.slice(0, 8) + '...' : 'unknown';
         
-        // Show "Du" for own messages, otherwise show short pubkey
-        const authorName = messageData.isOwn ? 'Du' : pubkeyShort;
+        // Determine author name based on message type
+        let authorName;
+        if (messageData.isOwn) {
+            authorName = 'Du';
+        } else if (messageData.isDirect && messageData.author) {
+            // For direct messages, use the author name from the message
+            authorName = messageData.author;
+        } else if (messageData.pubkey) {
+            // For room messages, use short pubkey
+            const pubkeyShort = messageData.pubkey.slice(0, 8) + '...';
+            authorName = pubkeyShort;
+        } else {
+            authorName = 'unknown';
+        }
+        
+        // Add encryption indicator for encrypted messages
+        const encryptionIndicator = messageData.encrypted ? '🔐 ' : '';
         
         messageElement.innerHTML = `
             <div class="message-header">
-                <span class="message-author">${authorName}</span>
+                <span class="message-author">${encryptionIndicator}${authorName}</span>
                 <span class="message-time">${timestamp}</span>
                 ${messageData.isOptimistic ? '<span class="message-status">📤</span>' : ''}
             </div>
@@ -565,9 +579,13 @@ export class ChatComponent {
 
     addDMContact(pubkey) {
         if (!this.dmContacts.has(pubkey)) {
+            // Create a more user-friendly name
+            const shortPubkey = pubkey.substring(0, 8);
+            const contactName = `User ${shortPubkey}`;
+            
             this.dmContacts.set(pubkey, {
                 pubkey: pubkey,
-                name: `User ${pubkey.substring(0, 8)}...`,
+                name: contactName,
                 lastMessage: null,
                 unreadCount: 0
             });
@@ -616,10 +634,16 @@ export class ChatComponent {
         // Update active contact
         this.updateDMContactsList();
         
-        // Update chat title
+        // Update chat title with better formatting
         const chatTitle = this.element.querySelector('#chatTitle');
         const contact = this.dmContacts.get(pubkey);
-        chatTitle.textContent = `🔐 ${contact ? contact.name : 'Encrypted DM'}`;
+        if (contact) {
+            chatTitle.textContent = `🔐 ${contact.name}`;
+        } else {
+            // Fallback if contact not found
+            const shortPubkey = pubkey.substring(0, 8);
+            chatTitle.textContent = `🔐 User ${shortPubkey}`;
+        }
         
         // Clear messages area and show DM messages
         this.clearMessages();
@@ -638,11 +662,18 @@ export class ChatComponent {
 
     loadDMMessages(pubkey) {
         const messagesContainer = this.element.querySelector('#messages');
+        const shortPubkey = pubkey.substring(0, 16);
+        const contact = this.dmContacts.get(pubkey);
+        const userName = contact ? contact.name : `User ${pubkey.substring(0, 8)}`;
+        
         messagesContainer.innerHTML = `
             <div class="welcome">
                 <h3>🔐 Verschlüsselte Unterhaltung</h3>
                 <p>Alle Nachrichten sind End-to-End verschlüsselt (NIP-04)</p>
-                <small>Pubkey: ${pubkey}</small>
+                <div style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 6px; font-size: 12px;">
+                    <strong>Gesprächspartner:</strong> ${userName}<br>
+                    <strong>Pubkey:</strong> ${shortPubkey}...
+                </div>
             </div>
         `;
 
