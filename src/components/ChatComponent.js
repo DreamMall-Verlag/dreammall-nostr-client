@@ -62,6 +62,8 @@ export class ChatComponent {
 
         this.setupEventListeners();
         this.subscribeToMessages();
+        // Initialize room counts on first load
+        setTimeout(() => this.updateAllRoomCounts(), 1000);
         return this.element;
     }
 
@@ -147,6 +149,9 @@ export class ChatComponent {
         // Clear messages for new room
         this.clearMessages();
         
+        // Update all room message counts
+        this.updateAllRoomCounts();
+        
         // Load messages for this room
         this.loadRoomMessages(roomName);
         
@@ -154,6 +159,13 @@ export class ChatComponent {
         this.subscribeToRoom(roomName);
         
         console.log(`🏠 Wechsle zu Raum: ${roomName}`);
+    }
+
+    updateAllRoomCounts() {
+        // Update message counts for all rooms
+        this.predefinedRooms.forEach(room => {
+            this.updateRoomMessageCount(room.id);
+        });
     }
 
     subscribeToMessages() {
@@ -381,8 +393,17 @@ export class ChatComponent {
         const room = this.element.querySelector(`[data-room="${roomName}"]`);
         if (room) {
             const statusElement = room.querySelector('.room-status');
-            const currentCount = parseInt(statusElement.textContent) || 0;
-            statusElement.textContent = `${currentCount + 1} Nachrichten`;
+            // Get actual message count from stored messages for this room
+            const actualCount = this.roomMessages.has(roomName) ? 
+                this.roomMessages.get(roomName).size : 0;
+            
+            if (actualCount > 0) {
+                statusElement.textContent = `${actualCount} Nachrichten`;
+            } else {
+                // Show default room description if no messages
+                const roomInfo = this.predefinedRooms.find(r => r.id === roomName);
+                statusElement.textContent = roomInfo ? roomInfo.description : 'Keine Nachrichten';
+            }
         }
     }
 
@@ -409,10 +430,8 @@ export class ChatComponent {
         // Clear sent messages tracking for new room
         this.sentMessages.clear();
         
-        // Clear room message storage
-        if (this.roomMessages.has(this.currentRoom)) {
-            this.roomMessages.get(this.currentRoom).clear();
-        }
+        // Don't clear stored messages - we need them for counting
+        // The loadRoomMessages method will repopulate the display
     }
 
     destroy() {
