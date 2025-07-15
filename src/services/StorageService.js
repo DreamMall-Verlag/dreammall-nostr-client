@@ -54,63 +54,43 @@ export class StorageService {
                     db.createObjectStore('settings', { keyPath: 'key' });
                 }
 
-                console.log('📦 IndexedDB Schema erstellt');
+                // Keys store
+                if (!db.objectStoreNames.contains('keys')) {
+                    db.createObjectStore('keys', { keyPath: 'id' });
+                }
+
+                console.log('✅ IndexedDB Schema erstellt');
             };
         });
     }
 
     // =================================================================
-    // Messages
+    // Message Storage
     // =================================================================
 
     async saveMessage(message) {
-        if (!this.db) return false;
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['messages'], 'readwrite');
             const store = transaction.objectStore('messages');
             
-            const request = store.add(message);
+            const request = store.put(message);
             
-            request.onsuccess = () => resolve(true);
-            request.onerror = () => {
-                // Message might already exist, try to update
-                store.put(message).onsuccess = () => resolve(true);
-                store.put(message).onerror = () => reject(request.error);
-            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
         });
     }
 
     async getMessages(roomId, limit = 100) {
-        if (!this.db) return [];
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['messages'], 'readonly');
             const store = transaction.objectStore('messages');
             const index = store.index('roomId');
             
             const request = index.getAll(roomId);
-            
-            request.onsuccess = () => {
-                const messages = request.result
-                    .sort((a, b) => a.timestamp - b.timestamp)
-                    .slice(-limit);
-                resolve(messages);
-            };
-            
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    async getMessagesByAuthor(authorPubkey, limit = 100) {
-        if (!this.db) return [];
-
-        return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['messages'], 'readonly');
-            const store = transaction.objectStore('messages');
-            const index = store.index('authorPubkey');
-            
-            const request = index.getAll(authorPubkey);
             
             request.onsuccess = () => {
                 const messages = request.result
@@ -124,70 +104,40 @@ export class StorageService {
     }
 
     async deleteMessage(messageId) {
-        if (!this.db) return false;
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['messages'], 'readwrite');
             const store = transaction.objectStore('messages');
             
             const request = store.delete(messageId);
             
-            request.onsuccess = () => resolve(true);
+            request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
     }
 
-    async clearMessages(roomId = null) {
-        if (!this.db) return false;
-
-        return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['messages'], 'readwrite');
-            const store = transaction.objectStore('messages');
-            
-            if (roomId) {
-                const index = store.index('roomId');
-                const request = index.openCursor(roomId);
-                
-                request.onsuccess = (event) => {
-                    const cursor = event.target.result;
-                    if (cursor) {
-                        cursor.delete();
-                        cursor.continue();
-                    } else {
-                        resolve(true);
-                    }
-                };
-                
-                request.onerror = () => reject(request.error);
-            } else {
-                const request = store.clear();
-                request.onsuccess = () => resolve(true);
-                request.onerror = () => reject(request.error);
-            }
-        });
-    }
-
     // =================================================================
-    // Rooms
+    // Room Storage
     // =================================================================
 
     async saveRoom(room) {
-        if (!this.db) return false;
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['rooms'], 'readwrite');
             const store = transaction.objectStore('rooms');
             
             const request = store.put(room);
             
-            request.onsuccess = () => resolve(true);
+            request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     }
 
     async getRooms() {
-        if (!this.db) return [];
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['rooms'], 'readonly');
             const store = transaction.objectStore('rooms');
@@ -199,151 +149,87 @@ export class StorageService {
         });
     }
 
-    async getRoom(roomId) {
-        if (!this.db) return null;
-
+    async deleteRoom(roomId) {
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['rooms'], 'readonly');
+            const transaction = this.db.transaction(['rooms'], 'readwrite');
             const store = transaction.objectStore('rooms');
             
-            const request = store.get(roomId);
+            const request = store.delete(roomId);
             
-            request.onsuccess = () => resolve(request.result || null);
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    async deleteRoom(roomId) {
-        if (!this.db) return false;
-
-        return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['rooms', 'messages'], 'readwrite');
-            
-            // Delete room
-            const roomStore = transaction.objectStore('rooms');
-            roomStore.delete(roomId);
-            
-            // Delete all messages in room
-            const messageStore = transaction.objectStore('messages');
-            const index = messageStore.index('roomId');
-            const request = index.openCursor(roomId);
-            
-            request.onsuccess = (event) => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    cursor.delete();
-                    cursor.continue();
-                } else {
-                    resolve(true);
-                }
-            };
-            
+            request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
     }
 
     // =================================================================
-    // Contacts
+    // Contact Storage
     // =================================================================
 
     async saveContact(contact) {
-        if (!this.db) return false;
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['contacts'], 'readwrite');
             const store = transaction.objectStore('contacts');
             
-            const contactData = {
-                ...contact,
-                lastContact: Date.now()
-            };
+            const request = store.put(contact);
             
-            const request = store.put(contactData);
-            
-            request.onsuccess = () => resolve(true);
+            request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     }
 
     async getContacts() {
-        if (!this.db) return [];
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['contacts'], 'readonly');
             const store = transaction.objectStore('contacts');
             
             const request = store.getAll();
             
-            request.onsuccess = () => {
-                const contacts = request.result.sort((a, b) => b.lastContact - a.lastContact);
-                resolve(contacts);
-            };
-            
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    async getContact(pubkey) {
-        if (!this.db) return null;
-
-        return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['contacts'], 'readonly');
-            const store = transaction.objectStore('contacts');
-            
-            const request = store.get(pubkey);
-            
-            request.onsuccess = () => resolve(request.result || null);
+            request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     }
 
     async deleteContact(pubkey) {
-        if (!this.db) return false;
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['contacts'], 'readwrite');
             const store = transaction.objectStore('contacts');
             
             const request = store.delete(pubkey);
             
-            request.onsuccess = () => resolve(true);
+            request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
     }
 
     // =================================================================
-    // Settings
+    // Settings Storage
     // =================================================================
 
-    async setSetting(key, value) {
-        if (!this.db) {
-            // Fallback to localStorage
-            localStorage.setItem(`nostr_setting_${key}`, JSON.stringify(value));
-            return true;
-        }
-
+    async saveSetting(key, value) {
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['settings'], 'readwrite');
             const store = transaction.objectStore('settings');
             
             const request = store.put({ key, value });
             
-            request.onsuccess = () => resolve(true);
+            request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     }
 
-    async getSetting(key, defaultValue = null) {
-        if (!this.db) {
-            // Fallback to localStorage
-            try {
-                const value = localStorage.getItem(`nostr_setting_${key}`);
-                return value ? JSON.parse(value) : defaultValue;
-            } catch (error) {
-                return defaultValue;
-            }
-        }
-
+    async getSetting(key) {
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['settings'], 'readonly');
             const store = transaction.objectStore('settings');
@@ -352,7 +238,7 @@ export class StorageService {
             
             request.onsuccess = () => {
                 const result = request.result;
-                resolve(result ? result.value : defaultValue);
+                resolve(result ? result.value : null);
             };
             
             request.onerror = () => reject(request.error);
@@ -360,118 +246,57 @@ export class StorageService {
     }
 
     async deleteSetting(key) {
-        if (!this.db) {
-            localStorage.removeItem(`nostr_setting_${key}`);
-            return true;
-        }
-
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['settings'], 'readwrite');
             const store = transaction.objectStore('settings');
             
             const request = store.delete(key);
             
-            request.onsuccess = () => resolve(true);
+            request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
     }
 
     // =================================================================
-    // Convenience Methods
+    // Key Storage
     // =================================================================
 
-    async getTheme() {
-        return await this.getSetting('theme', 'light');
-    }
-
-    async setTheme(theme) {
-        return await this.setSetting('theme', theme);
-    }
-
-    async getEncryptionEnabled() {
-        return await this.getSetting('encryptionEnabled', true);
-    }
-
-    async setEncryptionEnabled(enabled) {
-        return await this.setSetting('encryptionEnabled', enabled);
-    }
-
-    async getNotificationsEnabled() {
-        return await this.getSetting('notificationsEnabled', true);
-    }
-
-    async setNotificationsEnabled(enabled) {
-        return await this.setSetting('notificationsEnabled', enabled);
-    }
-
-    // =================================================================
-    // Data Management
-    // =================================================================
-
-    async exportData() {
-        if (!this.db) return null;
-
-        try {
-            const [messages, rooms, contacts, settings] = await Promise.all([
-                this.getAllData('messages'),
-                this.getAllData('rooms'),
-                this.getAllData('contacts'),
-                this.getAllData('settings')
-            ]);
-
-            return {
-                version: this.dbVersion,
-                timestamp: Date.now(),
-                data: {
-                    messages,
-                    rooms,
-                    contacts,
-                    settings
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ Fehler beim Exportieren der Daten:', error);
-            throw error;
-        }
-    }
-
-    async importData(exportData) {
-        if (!this.db || !exportData || !exportData.data) {
-            throw new Error('Ungültige Exportdaten');
-        }
-
-        try {
-            const transaction = this.db.transaction(['messages', 'rooms', 'contacts', 'settings'], 'readwrite');
-            
-            // Import each data type
-            for (const [storeName, items] of Object.entries(exportData.data)) {
-                if (Array.isArray(items) && items.length > 0) {
-                    const store = transaction.objectStore(storeName);
-                    for (const item of items) {
-                        store.put(item);
-                    }
-                }
-            }
-
-            return new Promise((resolve, reject) => {
-                transaction.oncomplete = () => {
-                    console.log('✅ Daten erfolgreich importiert');
-                    resolve(true);
-                };
-                transaction.onerror = () => reject(transaction.error);
-            });
-
-        } catch (error) {
-            console.error('❌ Fehler beim Importieren der Daten:', error);
-            throw error;
-        }
-    }
-
-    async getAllData(storeName) {
+    async saveKey(keyData) {
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction([storeName], 'readonly');
-            const store = transaction.objectStore(storeName);
+            const transaction = this.db.transaction(['keys'], 'readwrite');
+            const store = transaction.objectStore('keys');
+            
+            const request = store.put(keyData);
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getKey(keyId) {
+        if (!this.db) await this.init();
+        
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['keys'], 'readonly');
+            const store = transaction.objectStore('keys');
+            
+            const request = store.get(keyId);
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getAllKeys() {
+        if (!this.db) await this.init();
+        
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['keys'], 'readonly');
+            const store = transaction.objectStore('keys');
             
             const request = store.getAll();
             
@@ -480,116 +305,217 @@ export class StorageService {
         });
     }
 
-    async clearAllData() {
-        if (!this.db) return false;
-
+    async deleteKey(keyId) {
+        if (!this.db) await this.init();
+        
         return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['messages', 'rooms', 'contacts', 'settings'], 'readwrite');
+            const transaction = this.db.transaction(['keys'], 'readwrite');
+            const store = transaction.objectStore('keys');
             
-            let completed = 0;
-            const storeNames = ['messages', 'rooms', 'contacts', 'settings'];
+            const request = store.delete(keyId);
             
-            storeNames.forEach(storeName => {
-                const store = transaction.objectStore(storeName);
-                const request = store.clear();
-                
-                request.onsuccess = () => {
-                    completed++;
-                    if (completed === storeNames.length) {
-                        console.log('🗑️ Alle Daten gelöscht');
-                        resolve(true);
-                    }
-                };
-                
-                request.onerror = () => reject(request.error);
-            });
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
         });
     }
 
-    getStorageInfo() {
-        return navigator.storage?.estimate?.() || Promise.resolve({ quota: 0, usage: 0 });
-    }
+    // =================================================================
+    // DM Contacts Management
+    // =================================================================
 
-    async getUserProfile(pubkey) {
-        if (!this.db) {
-            console.error('❌ Datenbank nicht initialisiert');
-            return null;
-        }
-
-        try {
-            const transaction = this.db.transaction(['contacts'], 'readonly');
-            const store = transaction.objectStore('contacts');
-            const request = store.get(pubkey);
-            
-            return new Promise((resolve, reject) => {
-                request.onsuccess = () => {
-                    if (request.result) {
-                        resolve(request.result);
-                    } else {
-                        // Create basic profile if not found
-                        const basicProfile = {
-                            pubkey: pubkey,
-                            name: `User ${pubkey.substring(0, 8)}...`,
-                            about: '',
-                            picture: '',
-                            nip05: '',
-                            lastContact: Date.now()
-                        };
-                        resolve(basicProfile);
-                    }
-                };
-                
-                request.onerror = () => {
-                    console.error('❌ Fehler beim Abrufen des Benutzerprofils');
-                    reject(request.error);
-                };
-            });
-        } catch (error) {
-            console.error('❌ Fehler beim Abrufen des Benutzerprofils:', error);
-            return null;
-        }
-    }
-
-    async saveUserProfile(profile) {
-        if (!this.db) {
-            console.error('❌ Datenbank nicht initialisiert');
-            return false;
-        }
-
-        if (!profile.pubkey) {
-            console.error('❌ Profil benötigt pubkey');
-            return false;
-        }
-
+    async saveDMContact(pubkey, contactData) {
         try {
             const transaction = this.db.transaction(['contacts'], 'readwrite');
             const store = transaction.objectStore('contacts');
             
-            const profileData = {
-                pubkey: profile.pubkey,
-                name: profile.name || '',
-                about: profile.about || '',
-                picture: profile.picture || '',
-                nip05: profile.nip05 || '',
-                lastContact: Date.now()
+            const contact = {
+                pubkey,
+                displayName: contactData.displayName,
+                lastMessage: contactData.lastMessage || '',
+                lastMessageTime: contactData.lastMessageTime || Date.now(),
+                unreadCount: contactData.unreadCount || 0,
+                type: 'dm',
+                createdAt: Date.now()
             };
-            
-            const request = store.put(profileData);
-            
+
+            await store.put(contact);
+            console.log('💾 DM-Kontakt gespeichert:', contact);
+            return contact;
+        } catch (error) {
+            console.error('❌ Fehler beim Speichern des DM-Kontakts:', error);
+            throw error;
+        }
+    }
+
+    async getDMContacts() {
+        try {
+            const transaction = this.db.transaction(['contacts'], 'readonly');
+            const store = transaction.objectStore('contacts');
+            const request = store.getAll();
+
             return new Promise((resolve, reject) => {
                 request.onsuccess = () => {
-                    console.log('✅ Benutzerprofil gespeichert');
-                    resolve(true);
+                    const contacts = request.result.filter(contact => contact.type === 'dm');
+                    console.log('📖 DM-Kontakte geladen:', contacts.length);
+                    resolve(contacts);
                 };
-                
-                request.onerror = () => {
-                    console.error('❌ Fehler beim Speichern des Benutzerprofils');
-                    reject(request.error);
-                };
+                request.onerror = () => reject(request.error);
             });
         } catch (error) {
-            console.error('❌ Fehler beim Speichern des Benutzerprofils:', error);
-            return false;
+            console.error('❌ Fehler beim Laden der DM-Kontakte:', error);
+            return [];
+        }
+    }
+
+    async removeDMContact(pubkey) {
+        try {
+            const transaction = this.db.transaction(['contacts'], 'readwrite');
+            const store = transaction.objectStore('contacts');
+            
+            await store.delete(pubkey);
+            console.log('🗑️ DM-Kontakt entfernt:', pubkey);
+        } catch (error) {
+            console.error('❌ Fehler beim Entfernen des DM-Kontakts:', error);
+            throw error;
+        }
+    }
+
+    // =================================================================
+    // DM Messages Storage
+    // =================================================================
+
+    async saveDMMessage(message) {
+        try {
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const store = transaction.objectStore('messages');
+            
+            const messageData = {
+                id: message.id,
+                content: message.content,
+                author: message.author,
+                authorPubkey: message.authorPubkey,
+                timestamp: message.timestamp,
+                roomId: `dm_${message.senderPubkey || message.recipientPubkey}`,
+                encrypted: message.encrypted,
+                isDirect: true,
+                isOwn: message.isOwn,
+                recipientPubkey: message.recipientPubkey,
+                senderPubkey: message.senderPubkey
+            };
+
+            await store.put(messageData);
+            console.log('💾 DM-Nachricht gespeichert:', messageData);
+            return messageData;
+        } catch (error) {
+            console.error('❌ Fehler beim Speichern der DM-Nachricht:', error);
+            throw error;
+        }
+    }
+
+    async getDMMessages(pubkey) {
+        try {
+            const transaction = this.db.transaction(['messages'], 'readonly');
+            const store = transaction.objectStore('messages');
+            const roomId = `dm_${pubkey}`;
+            
+            const index = store.index('roomId');
+            const request = index.getAll(roomId);
+
+            return new Promise((resolve, reject) => {
+                request.onsuccess = () => {
+                    const messages = request.result.sort((a, b) => a.timestamp - b.timestamp);
+                    console.log('📖 DM-Nachrichten geladen:', messages.length, 'für', pubkey);
+                    resolve(messages);
+                };
+                request.onerror = () => reject(request.error);
+            });
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der DM-Nachrichten:', error);
+            return [];
+        }
+    }
+
+    // =================================================================
+    // Utility Methods
+    // =================================================================
+
+    async clearAll() {
+        if (!this.db) await this.init();
+        
+        const stores = ['messages', 'rooms', 'contacts', 'settings', 'keys'];
+        
+        return Promise.all(stores.map(storeName => {
+            return new Promise((resolve, reject) => {
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                
+                const request = store.clear();
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }));
+    }
+
+    async getStorageStats() {
+        if (!this.db) await this.init();
+        
+        const stores = ['messages', 'rooms', 'contacts', 'settings', 'keys'];
+        const stats = {};
+        
+        for (const storeName of stores) {
+            stats[storeName] = await new Promise((resolve, reject) => {
+                const transaction = this.db.transaction([storeName], 'readonly');
+                const store = transaction.objectStore(storeName);
+                
+                const request = store.count();
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        return stats;
+    }
+
+    // =================================================================
+    // LocalStorage Fallback (for simple data)
+    // =================================================================
+
+    setLocalStorage(key, value) {
+        try {
+            localStorage.setItem(`dm-nostr-${key}`, JSON.stringify(value));
+        } catch (error) {
+            console.error('❌ LocalStorage Fehler:', error);
+        }
+    }
+
+    getLocalStorage(key) {
+        try {
+            const item = localStorage.getItem(`dm-nostr-${key}`);
+            return item ? JSON.parse(item) : null;
+        } catch (error) {
+            console.error('❌ LocalStorage Fehler:', error);
+            return null;
+        }
+    }
+
+    removeLocalStorage(key) {
+        try {
+            localStorage.removeItem(`dm-nostr-${key}`);
+        } catch (error) {
+            console.error('❌ LocalStorage Fehler:', error);
+        }
+    }
+
+    // =================================================================
+    // Cleanup
+    // =================================================================
+
+    async destroy() {
+        if (this.db) {
+            this.db.close();
+            this.db = null;
         }
     }
 }

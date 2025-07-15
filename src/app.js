@@ -12,6 +12,7 @@ import { ToastService } from './services/ToastService.js';
 import { HeaderComponent } from './components/HeaderComponent.js';
 import { SetupComponent } from './components/SetupComponent.js';
 import { ChatComponent } from './components/ChatComponent.js';
+import { ChatComponentRefactored } from './components/ChatComponentRefactored.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { RelayManager } from './components/RelayManager.js';
 
@@ -98,8 +99,14 @@ class NostrApp {
             this.services.toastService
         );
         
-        // Create chat component
-        this.components.chat = new ChatComponent(
+        // Create chat component (use refactored version)
+        this.components.chat = new ChatComponentRefactored(
+            this.services.nostrService,
+            this.services.toastService
+        );
+        
+        // Keep old chat component for fallback
+        this.components.chatLegacy = new ChatComponent(
             this.services.nostrService,
             this.services.toastService
         );

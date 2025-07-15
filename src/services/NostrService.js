@@ -92,6 +92,70 @@ export class NostrService {
         return this.userProfile;
     }
 
+    /**
+     * Get public key
+     */
+    getPublicKey() {
+        return this.keyPair?.pubkey;
+    }
+
+    /**
+     * Get key pair
+     */
+    getKeyPair() {
+        return this.keyPair;
+    }
+
+    /**
+     * Convert hex pubkey to npub format
+     */
+    hexToNpub(hexPubkey) {
+        try {
+            if (!hexPubkey) return 'Nicht verfügbar';
+            
+            // Try to use nip19 directly first
+            if (nip19.npubEncode) {
+                return nip19.npubEncode(hexPubkey);
+            }
+            
+            // Fallback to encode method
+            if (nip19.encode) {
+                return nip19.encode('npub', hexPubkey);
+            }
+            
+            // If both fail, return fallback
+            return `npub_${hexPubkey.slice(0, 16)}...`;
+        } catch (error) {
+            console.error('❌ hexToNpub conversion failed:', error);
+            return `npub_${hexPubkey.slice(0, 16)}...`;
+        }
+    }
+
+    /**
+     * Convert npub to hex pubkey format
+     */
+    npubToPubkey(npub) {
+        try {
+            if (!npub || !npub.startsWith('npub')) {
+                throw new Error('Invalid npub format');
+            }
+            
+            // Try to use nip19 directly first
+            if (nip19.decode) {
+                const decoded = nip19.decode(npub);
+                if (decoded.type === 'npub') {
+                    return decoded.data;
+                }
+            }
+            
+            // If both fail, throw error
+            throw new Error('Failed to decode npub');
+        } catch (error) {
+            console.error('❌ npubToPubkey conversion failed:', error);
+            throw new Error('Ungültiger npub: ' + error.message);
+        }
+    }
+
     async sendMessage(content, roomId, encrypted = false) {
         if (!this.keyPair) {
             throw new Error('NOSTR Service nicht initialisiert - keine Schlüssel');
@@ -140,75 +204,6 @@ export class NostrService {
 
         } catch (error) {
             console.error('❌ Fehler beim Senden der Nachricht:', error);
-            throw error;
-        }
-    }
-
-    async sendDirectMessage(content, recipientPubkey, encrypted = true) {
-        if (!this.keyPair) {
-            throw new Error('NOSTR Service nicht initialisiert - keine Schlüssel');
-        }
-
-        try {
-            // Get relay URLs from RelayService
-            const relayUrls = this.relayService?.getConnectedRelays() || this.relayService?.defaultRelays || ['wss://relay.damus.io'];
-            
-            console.log('📡 Sende verschlüsselte DM an Relays:', relayUrls);
-            
-            if (relayUrls.length === 0) {
-                throw new Error('Keine Relay-Verbindungen verfügbar');
-            }
-
-            let messageContent = content;
-            
-            // NIP-04: Encrypted Direct Messages
-            if (encrypted) {
-                try {
-                    // Import NIP-04 encryption functions
-                    const { encrypt } = await import('nostr-tools/nip04');
-                    
-                    // Encrypt the message content
-                    messageContent = await encrypt(this.keyPair.privkey, recipientPubkey, content);
-                    console.log('🔐 Nachricht verschlüsselt mit NIP-04');
-                } catch (encryptError) {
-                    console.error('❌ Verschlüsselung fehlgeschlagen:', encryptError);
-                    throw new Error('Nachricht konnte nicht verschlüsselt werden');
-                }
-            }
-
-            const event = {
-                kind: 4, // NIP-04: Encrypted Direct Message
-                created_at: Math.floor(Date.now() / 1000),
-                tags: [
-                    ['p', recipientPubkey], // NIP-04: Recipient tag
-                    ['client', 'dreammall-nostr']
-                ],
-                content: messageContent,
-                pubkey: this.keyPair.pubkey
-            };
-
-            // Sign the event
-            const signedEvent = finalizeEvent(event, this.keyPair.privkey);
-
-            // Publish to relays
-            console.log('📤 Publiziere NIP-04 Encrypted DM Event:', signedEvent);
-            await this.pool.publish(relayUrls, signedEvent);
-
-            // Return message object for UI
-            return {
-                id: signedEvent.id,
-                content: content, // Return decrypted content for UI
-                author: this.userProfile?.name || 'DreamMall User',
-                authorPubkey: this.keyPair.pubkey,
-                recipientPubkey: recipientPubkey,
-                timestamp: signedEvent.created_at * 1000,
-                encrypted: encrypted,
-                isOwn: true,
-                isDM: true
-            };
-
-        } catch (error) {
-            console.error('❌ Fehler beim Senden der verschlüsselten DM:', error);
             throw error;
         }
     }
@@ -558,4 +553,267 @@ export class NostrService {
             return null;
         }
     }
+
+    // =================================================================
+    // NIP-04: Encryption/Decryption Methods
+    // =================================================================
+
+    /**
+     * Encrypt message for another user using NIP-04
+     */
+    async encrypt(recipientPubkey, message) {
+        try {
+            if (!this.keyPair || !this.keyPair.privkey) {
+                throw new Error('No private key available for encryption');
+            }
+
+            console.log('🔐 Verschlüssele Nachricht für:', recipientPubkey);
+            const encryptedContent = await nip04.encrypt(this.keyPair.privkey, recipientPubkey, message);
+            console.log('✅ Nachricht verschlüsselt');
+            
+            return encryptedContent;
+        } catch (error) {
+            console.error('❌ Verschlüsselung fehlgeschlagen:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Decrypt message from another user using NIP-04
+     */
+    async decrypt(senderPubkey, encryptedMessage) {
+        try {
+            if (!this.keyPair || !this.keyPair.privkey) {
+                throw new Error('No private key available for decryption');
+            }
+
+            console.log('🔓 Entschlüssele Nachricht von:', senderPubkey);
+            const decryptedContent = await nip04.decrypt(this.keyPair.privkey, senderPubkey, encryptedMessage);
+            console.log('✅ Nachricht entschlüsselt');
+            
+            return decryptedContent;
+        } catch (error) {
+            console.error('❌ Entschlüsselung fehlgeschlagen:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get event hash for manual calculation
+     */
+    getEventHash(event) {
+        return getEventHash(event);
+    }
+
+    /**
+     * Sign event manually
+     */
+    async signEvent(event) {
+        try {
+            if (!this.keyPair || !this.keyPair.privkey) {
+                throw new Error('No private key available for signing');
+            }
+
+            const signedEvent = finalizeEvent(event, this.keyPair.privkey);
+            return signedEvent.sig;
+        } catch (error) {
+            console.error('❌ Event signing failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get direct messages with a specific user
+     * @param {string} pubkey - The pubkey of the other user
+     * @returns {Promise<Array>} Array of messages
+     */
+    async getDirectMessages(pubkey) {
+        if (!this.keyPair) {
+            throw new Error('Kein Schlüsselpaar verfügbar');
+        }
+
+        const messages = [];
+        
+        try {
+            // Query for messages sent TO us FROM the other user (kind 4)
+            const receivedFilter = {
+                kinds: [4],
+                authors: [pubkey],
+                '#p': [this.keyPair.pubkey],
+                limit: 100
+            };
+
+            // Query for messages sent FROM us TO the other user (kind 4)
+            const sentFilter = {
+                kinds: [4],
+                authors: [this.keyPair.pubkey],
+                '#p': [pubkey],
+                limit: 100
+            };
+
+            console.log('📥 Lade DM-History mit:', pubkey);
+            console.log('📥 Empfangene Filter:', receivedFilter);
+            console.log('📤 Gesendete Filter:', sentFilter);
+
+            const relays = this.relayService.getConnectedRelays();
+            if (relays.length === 0) {
+                console.warn('⚠️ Keine verbundenen Relays für DM-History');
+                return messages;
+            }
+
+            // Query both directions
+            const [receivedEvents, sentEvents] = await Promise.all([
+                this.queryRelays(receivedFilter),
+                this.queryRelays(sentFilter)
+            ]);
+
+            console.log('📥 Empfangene Events:', receivedEvents.length);
+            console.log('📤 Gesendete Events:', sentEvents.length);
+
+            // Process received messages
+            for (const event of receivedEvents) {
+                try {
+                    let content = event.content;
+                    let encrypted = false;
+
+                    // Try to decrypt
+                    try {
+                        const { decrypt } = await import('nostr-tools/nip04');
+                        content = await decrypt(this.keyPair.privkey, event.pubkey, event.content);
+                        encrypted = true;
+                    } catch (decryptError) {
+                        console.log('Nachricht war nicht verschlüsselt:', decryptError);
+                    }
+
+                    const authorName = await this.getAuthorName(event.pubkey);
+
+                    messages.push({
+                        id: event.id,
+                        content: content,
+                        author: authorName,
+                        authorPubkey: event.pubkey,
+                        timestamp: event.created_at * 1000,
+                        encrypted: encrypted,
+                        isOwn: false,
+                        isDirect: true
+                    });
+                } catch (error) {
+                    console.error('❌ Fehler beim Verarbeiten empfangener DM:', error);
+                }
+            }
+
+            // Process sent messages
+            for (const event of sentEvents) {
+                try {
+                    let content = event.content;
+                    let encrypted = false;
+
+                    // Try to decrypt (we encrypted it to the other user)
+                    try {
+                        const { decrypt } = await import('nostr-tools/nip04');
+                        content = await decrypt(this.keyPair.privkey, pubkey, event.content);
+                        encrypted = true;
+                    } catch (decryptError) {
+                        console.log('Gesendete Nachricht war nicht verschlüsselt:', decryptError);
+                    }
+
+                    const authorName = await this.getAuthorName(this.keyPair.pubkey);
+
+                    messages.push({
+                        id: event.id,
+                        content: content,
+                        author: authorName,
+                        authorPubkey: this.keyPair.pubkey,
+                        timestamp: event.created_at * 1000,
+                        encrypted: encrypted,
+                        isOwn: true,
+                        isDirect: true
+                    });
+                } catch (error) {
+                    console.error('❌ Fehler beim Verarbeiten gesendeter DM:', error);
+                }
+            }
+
+            // Sort messages by timestamp
+            messages.sort((a, b) => a.timestamp - b.timestamp);
+
+            console.log('✅ DM-History geladen:', messages.length, 'Nachrichten');
+            return messages;
+
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der DM-History:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Query multiple relays for events
+     * @param {Object} filter - NOSTR filter
+     * @returns {Promise<Array>} Array of events
+     */
+    async queryRelays(filter) {
+        const relays = this.relayService.getConnectedRelays();
+        
+        if (relays.length === 0) {
+            console.warn('⚠️ Keine Relays für Query verfügbar');
+            return [];
+        }
+
+        const queryPromises = relays.map(relay => {
+            return new Promise((resolve) => {
+                const events = [];
+                let subscription = null;
+                
+                try {
+                    subscription = relay.subscribe([filter], {
+                        onevent: (event) => {
+                            events.push(event);
+                        },
+                        oneose: () => {
+                            resolve(events);
+                        },
+                        onclose: () => {
+                            resolve(events);
+                        }
+                    });
+                } catch (error) {
+                    console.error('❌ Fehler beim Erstellen der Subscription:', error);
+                    resolve(events);
+                }
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    if (subscription) {
+                        try {
+                            // Try different unsub methods
+                            if (typeof subscription.unsub === 'function') {
+                                subscription.unsub();
+                            } else if (typeof subscription.close === 'function') {
+                                subscription.close();
+                            } else if (typeof subscription.unsubscribe === 'function') {
+                                subscription.unsubscribe();
+                            }
+                        } catch (unsubError) {
+                            console.warn('⚠️ Fehler beim Beenden der Subscription:', unsubError);
+                        }
+                    }
+                    resolve(events);
+                }, 5000);
+            });
+        });
+
+        const results = await Promise.all(queryPromises);
+        
+        // Merge all events and remove duplicates
+        const eventMap = new Map();
+        results.forEach(events => {
+            events.forEach(event => {
+                eventMap.set(event.id, event);
+            });
+        });
+
+        return Array.from(eventMap.values());
+    }
 }
+
+// Updated: Fixed queryRelays subscription handling & NIP modules
