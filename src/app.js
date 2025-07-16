@@ -11,10 +11,10 @@ import { ToastService } from './services/ToastService.js';
 
 import { HeaderComponent } from './components/HeaderComponent.js';
 import { SetupComponent } from './components/SetupComponent.js';
-import { ChatComponent } from './components/ChatComponent.js';
 import { ChatComponentRefactored } from './components/ChatComponentRefactored.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { RelayManager } from './components/RelayManager.js';
+import { APP_CONFIG } from './config/app-config.js';
 
 console.log('🚀 DreamMall NOSTR Client startet...');
 
@@ -99,17 +99,18 @@ class NostrApp {
             this.services.toastService
         );
         
-        // Create chat component (use refactored version)
+        // Create chat component (use refactored version for better stability)
         this.components.chat = new ChatComponentRefactored(
             this.services.nostrService,
             this.services.toastService
         );
         
-        // Keep old chat component for fallback
-        this.components.chatLegacy = new ChatComponent(
+        // Keep original chat component for fallback
+       /* this.components.chatLegacy = new ChatComponent(
             this.services.nostrService,
             this.services.toastService
         );
+        */
         
         // Create modals
         this.components.settingsModal = new SettingsModal(
@@ -235,7 +236,7 @@ class NostrApp {
             await this.services.relayService.connect();
             
             // Wait a bit for connections to establish
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // Check connection status
             const relayStatus = this.services.relayService.getStatus();
@@ -251,15 +252,8 @@ class NostrApp {
             console.error('❌ Chat-Initialisierung fehlgeschlagen:', error);
             this.services.toastService.showError('Fehler beim Verbinden mit NOSTR');
             
-            // Show detailed error for debugging
-            console.error('💥 Detaillierter Fehler:', {
-                message: error.message,
-                stack: error.stack,
-                services: Object.keys(this.services),
-                keyService: !!this.services.keyService,
-                nostrService: !!this.services.nostrService,
-                relayService: !!this.services.relayService
-            });
+            // Continue anyway for testing
+            console.log('⚠️ Fahre trotz Fehler fort...');
         }
     }
 

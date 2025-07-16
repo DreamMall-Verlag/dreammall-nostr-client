@@ -2,15 +2,15 @@
 // Relay Service - Manages NOSTR Relay Connections
 // =================================================================
 
+import { APP_CONFIG } from '../config/app-config.js';
+
 export class RelayService {
     constructor() {
         this.relays = new Map();
         this.eventHandlers = new Map();
         this.nostrService = null;
         this.connectionState = 'disconnected';
-        this.defaultRelays = [
-            'wss://relay.damus.io'               // Nur Damus für Tests
-        ];
+        this.defaultRelays = APP_CONFIG.defaultRelays;
     }
 
     // Event Emitter functionality
@@ -340,12 +340,31 @@ export class RelayService {
 
     async testRelay(url) {
         try {
-            const relay = this.pool.ensureRelay(url);
-            await relay.connect();
+            console.log(`🔗 Teste Relay: ${url}`);
             
-            const isConnected = relay.connected;
-            console.log(`🔗 Relay Test: ${url} - ${isConnected ? 'Connected' : 'Failed'}`);
-            return isConnected;
+            // Simple connection test
+            const testSocket = new WebSocket(url);
+            
+            return new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    testSocket.close();
+                    resolve(false);
+                }, 5000);
+                
+                testSocket.onopen = () => {
+                    clearTimeout(timeout);
+                    console.log(`✅ Relay Test erfolgreich: ${url}`);
+                    testSocket.close();
+                    resolve(true);
+                };
+                
+                testSocket.onerror = (error) => {
+                    clearTimeout(timeout);
+                    console.error(`❌ Relay Test fehlgeschlagen: ${url}`, error);
+                    resolve(false);
+                };
+            });
+            
         } catch (error) {
             console.error(`❌ Relay Test fehlgeschlagen: ${url}`, error);
             return false;

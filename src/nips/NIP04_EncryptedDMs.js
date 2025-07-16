@@ -86,7 +86,7 @@ export class NIP04_EncryptedDMs {
     }
 
     /**
-     * Subscribe to encrypted DMs for current user
+     * Subscribe to encrypted DMs and regular DMs for current user
      */
     subscribeToEncryptedDMs(onDM) {
         const userPubkey = this.nostrService.getPublicKey();
@@ -102,15 +102,41 @@ export class NIP04_EncryptedDMs {
                 kinds: [this.KIND_ENCRYPTED_DM],
                 authors: [userPubkey],
                 since: Math.floor(Date.now() / 1000) - 3600
+            },
+            // Also subscribe to regular kind:1 events that are DMs (have #p tag with our pubkey)
+            {
+                kinds: [1],
+                '#p': [userPubkey],
+                since: Math.floor(Date.now() / 1000) - (24 * 60 * 60) // Last 24 hours
             }
         ];
 
-        console.log('📡 NIP-04 Abonniere verschlüsselte DMs');
+        console.log('📡 NIP-04 Abonniere verschlüsselte DMs und normale DMs');
         
         return this.nip01.subscribe(filters, async (event) => {
             try {
-                const decryptedDM = await this.decryptDM(event);
-                onDM(decryptedDM);
+                if (event.kind === this.KIND_ENCRYPTED_DM) {
+                    // Handle encrypted DM
+                    const decryptedDM = await this.decryptDM(event);
+                    onDM(decryptedDM);
+                } else if (event.kind === 1) {
+                    // Handle regular DM (kind: 1 with #p tag)
+                    const isDirectMessage = event.tags && event.tags.some(tag => 
+                        tag[0] === 'p' && tag[1] === userPubkey
+                    );
+                    
+                    if (isDirectMessage) {
+                        console.log('📨 NIP-04 Normale DM erhalten:', event);
+                        onDM({
+                            ...event,
+                            isDecrypted: true,
+                            decryptedContent: event.content,
+                            senderPubkey: event.pubkey,
+                            recipientPubkey: userPubkey,
+                            isDirectMessage: true
+                        });
+                    }
+                }
             } catch (error) {
                 console.error('❌ NIP-04 DM Processing Error:', error);
             }

@@ -13,13 +13,13 @@ export class NIP28_PublicChat {
     }
 
     /**
-     * Send message to public chat room (simplified for DreamMall)
+     * Send message to public chat room - NEUE IMPLEMENTIERUNG
      */
     async sendRoomMessage(roomName, message) {
         try {
             console.log(`💬 NIP-28 Sende Nachricht in Raum: ${roomName}`);
             
-            // Create tags for room identification
+            // Create tags for room identification - NUR Room-Tag, keine #p Tags!
             const tags = [['t', roomName]];
             
             // Create event using NIP-01
@@ -28,7 +28,7 @@ export class NIP28_PublicChat {
             // Publish event
             await this.nip01.publish(event);
             
-            console.log('✅ NIP-28 Raum-Nachricht gesendet');
+            console.log('✅ NIP-28 Raum-Nachricht gesendet mit Tags:', tags);
             return event;
             
         } catch (error) {
@@ -224,22 +224,63 @@ export class NIP28_PublicChat {
     }
 
     /**
-     * Subscribe to room messages
+     * Subscribe to room messages - NEUE STRENGE IMPLEMENTIERUNG
      */
     subscribeToRoom(roomName, onMessage) {
+        console.log(`📡 NIP-28 Abonniere Raum mit strikter Filterung: ${roomName}`);
+        
+        // SEHR STRENGE Filter - nur Events mit exakt dem richtigen Tag
         const filters = [
             {
                 kinds: [1], // Regular text notes
-                '#t': [roomName],
+                '#t': [roomName], // NUR Nachrichten mit diesem exakten Room-Tag
                 since: Math.floor(Date.now() / 1000) - (24 * 60 * 60), // Last 24 hours
-                limit: 100
+                limit: 50
             }
         ];
 
-        console.log(`📡 NIP-28 Abonniere Raum: ${roomName}`);
-        
         return this.nip01.subscribe(filters, (event) => {
-            console.log(`📨 NIP-28 Nachricht erhalten in ${roomName}:`, event);
+            // STRIKTE Validierung - mehrfache Prüfung!
+            
+            // 1. Muss kind:1 sein
+            if (event.kind !== 1) {
+                console.log(`⚠️ NIP-28 Event ignoriert - falscher kind: ${event.kind}`);
+                return;
+            }
+            
+            // 2. Muss Tags haben
+            if (!event.tags || !Array.isArray(event.tags)) {
+                console.log(`⚠️ NIP-28 Event ignoriert - keine Tags:`, event);
+                return;
+            }
+            
+            // 3. Muss exakt den richtigen Room-Tag haben
+            const hasCorrectRoomTag = event.tags.some(tag => 
+                Array.isArray(tag) && 
+                tag.length >= 2 && 
+                tag[0] === 't' && 
+                tag[1] === roomName
+            );
+            
+            if (!hasCorrectRoomTag) {
+                console.log(`⚠️ NIP-28 Event ignoriert - kein korrekter Room-Tag für ${roomName}:`, event.tags);
+                return;
+            }
+            
+            // 4. Darf KEINE #p Tags haben (das wären DMs)
+            const hasPersonalTag = event.tags.some(tag => 
+                Array.isArray(tag) && 
+                tag.length >= 2 && 
+                tag[0] === 'p'
+            );
+            
+            if (hasPersonalTag) {
+                console.log(`⚠️ NIP-28 Event ignoriert - hat #p Tag (DM):`, event.tags);
+                return;
+            }
+            
+            // 5. Validierung bestanden - Event verarbeiten
+            console.log(`✅ NIP-28 Gültige Raum-Nachricht für ${roomName}:`, event);
             onMessage({
                 ...event,
                 roomName,

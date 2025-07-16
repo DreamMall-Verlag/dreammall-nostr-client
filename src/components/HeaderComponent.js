@@ -19,6 +19,8 @@ export class HeaderComponent {
                 <span id="statusText">Nicht verbunden</span>
             </div>
             <div class="chat-controls" id="controls" style="display: none;">
+                                    <button class="btn btn-sm" id="userBtn" title="Dein Profil">👤</button>
+
                 <button class="btn btn-sm" id="settingsBtn">⚙️</button>
                 <button class="btn btn-sm" id="relaysBtn">🔗</button>
             </div>
@@ -29,9 +31,13 @@ export class HeaderComponent {
     }
 
     setupEventListeners() {
+         const userBtn = this.element.querySelector('#userBtn');
         const settingsBtn = this.element.querySelector('#settingsBtn');
         const relaysBtn = this.element.querySelector('#relaysBtn');
 
+
+         userBtn.addEventListener('click', () => this.showUserProfile());
+         
         settingsBtn?.addEventListener('click', () => {
             this.dispatchEvent('showSettings');
         });

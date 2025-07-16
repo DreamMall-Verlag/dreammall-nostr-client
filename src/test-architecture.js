@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     testButton.textContent = '🧪 Test Modulare Architektur';
     testButton.className = 'btn btn-primary';
     testButton.style.position = 'fixed';
-    testButton.style.top = '10px';
+    testButton.style.bottom = '10px';
     testButton.style.right = '10px';
     testButton.style.zIndex = '9999';
     
