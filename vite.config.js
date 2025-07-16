@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(({ command, mode }) => ({
   root: '.',
-  base: mode === 'development' ? '/dreammall-nostr-client/' : '/', // Dev: GitHub Pages Pfad, Production: Root
+  base: process.env.GITHUB_ACTIONS ? '/dreammall-nostr-client/' : '/', // GitHub Pages: Unterverzeichnis, Lokal: Root
   
   // Global polyfills
   define: {
