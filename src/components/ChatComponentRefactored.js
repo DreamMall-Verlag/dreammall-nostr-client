@@ -1,16 +1,18 @@
 // =================================================================
-// Refactored Chat Component - Modularer Aufbau (Updated)
+// Refactored Chat Component - Modularer Aufbau (CLEAN VERSION)
 // Nutzt NIP-spezifische Module und UI-Komponenten
 // =================================================================
 
 import { NIP01_BasicProtocol } from '../nips/NIP01_BasicProtocol.js';
+import { NIP02_ContactLists } from '../nips/NIP02_ContactLists.js';
 import { NIP04_EncryptedDMs } from '../nips/NIP04_EncryptedDMs.js';
 import { NIP28_PublicChat } from '../nips/NIP28_PublicChat.js';
 import { NIP17_KindMessages } from '../nips/NIP17_KindMessages.js';
 import { NIP104_PrivateGroups } from '../nips/NIP104_PrivateGroups.js';
 import { ModalComponent } from './ui/ModalComponent.js';
 import { RoomManagerComponent } from './ui/RoomManagerComponent.js';
-import { ROOM_CONFIG, DEFAULT_SETTINGS } from '../config/app-config.js';
+import { showCreatePrivateGroupModal } from './ui/modals/CreatePrivateGroupModal.js';
+import { APP_CONFIG, ROOM_CONFIG, DEFAULT_SETTINGS } from '../config/app-config.js';
 
 export class ChatComponentRefactored {
     constructor(nostrService, toastService) {
@@ -19,6 +21,7 @@ export class ChatComponentRefactored {
         
         // Initialize NIP modules
         this.nip01 = new NIP01_BasicProtocol(nostrService);
+        this.nip02 = new NIP02_ContactLists(nostrService, this.nip01);
         this.nip04 = new NIP04_EncryptedDMs(nostrService, this.nip01);
         this.nip28 = new NIP28_PublicChat(nostrService, this.nip01);
         this.nip17 = new NIP17_KindMessages(nostrService, this.nip01);
@@ -103,6 +106,45 @@ export class ChatComponentRefactored {
     }
 
     /**
+     * Render rooms section
+     */
+    renderRoomsSection() {
+        return `
+            <div class="room-section">
+                <h4 class="section-title">🌍 Test Räume (V2)</h4>
+                <div class="rooms public-rooms">
+                    <div class="room active" data-room="dreamtest-public-v2">
+                        <div class="room-name">Offener Test Raum</div>
+                        <div class="room-status">Öffentlich - Für alle</div>
+                    </div>
+                    <div class="room" data-room="dreamtest-private-v2">
+                        <div class="room-name">Geschlossener Test Raum</div>
+                        <div class="room-status">Privat - Mit Einladung</div>
+                    </div>
+                </div>
+                
+                <div class="room-info">
+                    <small>ℹ️ Neue saubere Test-Umgebung ohne alte Daten</small>
+                </div>
+            </div>
+            
+            <div class="private-groups-section">
+                <h4 class="section-title">🔐 Private Gruppen</h4>
+                <div class="private-groups-actions">
+                    <button class="btn btn-sm btn-primary" id="createPrivateGroupBtn">
+                        ➕ Neue verschlüsselte Gruppe
+                    </button>
+                </div>
+                <div class="private-groups-list" id="privateGroupsList">
+                    <div class="loading">
+                        <p>Lade private Gruppen...</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
      * Render DM section
      */
     renderDMSection() {
@@ -178,45 +220,6 @@ export class ChatComponentRefactored {
     }
 
     /**
-     * Render rooms section - NEUE SAUBERE RAUM-STRUKTUR
-     */
-    renderRoomsSection() {
-        return `
-            <div class="room-section">
-                <h4 class="section-title">🌍 Test Räume (V2)</h4>
-                <div class="rooms public-rooms">
-                    <div class="room active" data-room="dreamtest-public-v2">
-                        <div class="room-name">Offener Test Raum</div>
-                        <div class="room-status">Öffentlich - Für alle</div>
-                    </div>
-                    <div class="room" data-room="dreamtest-private-v2">
-                        <div class="room-name">Geschlossener Test Raum</div>
-                        <div class="room-status">Privat - Mit Einladung</div>
-                    </div>
-                </div>
-                
-                <div class="room-info">
-                    <small>ℹ️ Neue saubere Test-Umgebung ohne alte Daten</small>
-                </div>
-            </div>
-            
-            <div class="private-groups-section">
-                <h4 class="section-title">🔐 Private Gruppen</h4>
-                <div class="private-groups-actions">
-                    <button class="btn btn-sm btn-primary" id="createPrivateGroupBtn">
-                        ➕ Neue verschlüsselte Gruppe
-                    </button>
-                </div>
-                <div class="private-groups-list" id="privateGroupsList">
-                    <div class="loading">
-                        <p>Lade private Gruppen...</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
      * Setup event listeners
      */
     setupEventListeners() {
@@ -267,16 +270,27 @@ export class ChatComponentRefactored {
         // Private groups functionality
         const createPrivateGroupBtn = this.element.querySelector('#createPrivateGroupBtn');
         if (createPrivateGroupBtn) {
-            createPrivateGroupBtn.addEventListener('click', () => this.showCreatePrivateGroupModal());
+            createPrivateGroupBtn.addEventListener('click', () => {
+                showCreatePrivateGroupModal(
+                    this.nip104, 
+                    this.toastService, 
+                    () => this.updatePrivateGroupsList()
+                );
+            });
         }
-
     }
 
     /**
-     * Initialize chat - SAUBERER START
+     * Initialize chat
      */
     async initializeChat() {
         console.log('🔄 Initialisiere Chat...');
+        
+        // Clear stored messages if configured for fresh start
+        if (APP_CONFIG.clearStorageOnStart) {
+            console.log('🗑️ Fresh Start aktiviert - lösche alte Nachrichten');
+            this.clearAllStoredMessages();
+        }
         
         // Load initial messages for current room
         await this.loadRoomMessages(this.currentRoom);
@@ -292,513 +306,66 @@ export class ChatComponentRefactored {
         window.leavePrivateGroup = (groupId) => this.leavePrivateGroup(groupId);
         window.inviteToPrivateGroup = (groupId) => this.inviteToPrivateGroup(groupId);
         
-        // Add a test function to create a demo private group
-        window.createTestPrivateGroup = async () => {
-            try {
-                await this.nip104.createRealPrivateGroup(
-                    "Test Verschlüsselte Gruppe",
-                    "Dies ist eine Test-Gruppe für das NIP-104 System",
-                    [] // No initial members
-                );
-                this.updatePrivateGroupsList();
-                this.toastService.showSuccess("Test-Gruppe erstellt!");
-            } catch (error) {
-                console.error('❌ Test-Gruppe Fehler:', error);
-                this.toastService.showError("Fehler beim Erstellen der Test-Gruppe");
-            }
-        };
-        
-        // Subscribe to new messages
+        // Subscribe to messages
         this.subscribeToRoomMessages();
         this.subscribeToDirectMessages();
         this.subscribeToPrivateGroupMessages();
     }
 
+    // =================================================================
+    // STORAGE MANAGEMENT
+    // =================================================================
+
     /**
-     * Enter a private group
+     * Clear all stored messages (for fresh start)
      */
-    async enterPrivateGroup(groupId) {
+    clearAllStoredMessages() {
         try {
-            console.log(`🚪 Betrete private Gruppe: ${groupId}`);
+            console.log('🗑️ Lösche alle gespeicherten Nachrichten...');
             
-            if (!this.nip104.hasGroupAccess(groupId)) {
-                this.toastService.showError('Kein Zugriff auf diese Gruppe');
-                return;
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                keys.push(localStorage.key(i));
             }
             
-            const groupInfo = this.nip104.getGroupInfo(groupId);
-            if (!groupInfo) {
-                this.toastService.showError('Gruppe nicht gefunden');
-                return;
-            }
-            
-            // Switch to private group view
-            this.currentView = 'private_group';
-            this.currentRoom = groupId;
-            
-            // Update UI
-            this.updateChatHeader(groupInfo.name);
-            await this.loadPrivateGroupMessages(groupId);
-            
-            this.toastService.showSuccess(`Gruppe "${groupInfo.name}" betreten`);
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Betreten der Gruppe:', error);
-            this.toastService.showError('Fehler beim Betreten der Gruppe');
-        }
-    }
-
-    /**
-     * Leave a private group
-     */
-    async leavePrivateGroup(groupId) {
-        try {
-            await this.nip104.leaveGroup(groupId);
-            this.updatePrivateGroupsList();
-            this.toastService.showSuccess('Gruppe verlassen');
-        } catch (error) {
-            console.error('❌ Fehler beim Verlassen der Gruppe:', error);
-            this.toastService.showError('Fehler beim Verlassen der Gruppe');
-        }
-    }
-
-    /**
-     * Invite user to private group
-     */
-    async inviteToPrivateGroup(groupId) {
-        const userPubkey = prompt('Geben Sie die npub oder hex pubkey des Benutzers ein:');
-        if (!userPubkey) return;
-        
-        try {
-            // TODO: Implement invitation logic
-            this.toastService.showSuccess('Einladung gesendet');
-        } catch (error) {
-            console.error('❌ Fehler beim Senden der Einladung:', error);
-            this.toastService.showError('Fehler beim Senden der Einladung');
-        }
-    }
-
-    /**
-     * Load private group messages
-     */
-    async loadPrivateGroupMessages(groupId) {
-        try {
-            console.log(`📜 Lade Nachrichten für private Gruppe: ${groupId}`);
-            
-            const messages = this.getStoredMessages(`private_group_${groupId}`) || [];
-            this.displayMessages(messages);
-            
-            // Subscribe to new messages for this group
-            this.nip104.subscribeToPrivateGroup(groupId, (message) => {
-                this.handlePrivateGroupMessage(message);
+            let deletedCount = 0;
+            keys.forEach(key => {
+                if (key.startsWith('messages_')) {
+                    localStorage.removeItem(key);
+                    deletedCount++;
+                    console.log(`🗑️ Gelöscht: ${key}`);
+                }
             });
             
+            console.log(`✅ ${deletedCount} Nachrichten-Einträge aus localStorage gelöscht`);
+            
         } catch (error) {
-            console.error('❌ Fehler beim Laden der Gruppennachrichten:', error);
+            console.error('❌ Fehler beim Löschen der gespeicherten Nachrichten:', error);
         }
     }
 
     /**
-     * Handle private group message
+     * Clear all localStorage (complete reset)
      */
-    handlePrivateGroupMessage(message) {
-        console.log('📩 Neue private Gruppennachricht:', message);
-        
-        if (this.currentView === 'private_group' && this.currentRoom === message.groupId) {
-            this.displayMessage(message);
-        }
-        
-        // Store message
-        this.storeMessage(message, `private_group_${message.groupId}`);
-    }
-
-    /**
-     * Subscribe to private group messages
-     */
-    subscribeToPrivateGroupMessages() {
-        // Subscribe to group invitations
-        this.nip104.subscribeToGroupInvites((invite) => {
-            console.log('📧 Neue Gruppeneinladung:', invite);
-            this.handleGroupInvitation(invite);
-        });
-    }
-
-    /**
-     * Handle group invitation
-     */
-    handleGroupInvitation(invite) {
-        // Show invitation notification
-        this.toastService.showSuccess(`Einladung zu Gruppe "${invite.groupName}" erhalten`);
-        
-        // Update private groups list
-        this.updatePrivateGroupsList();
-    }
-
-    /**
-     * Update chat header
-     */
-    updateChatHeader(title) {
-        const chatTitle = this.element.querySelector('#chatTitle');
-        if (chatTitle) {
-            chatTitle.textContent = title;
-        }
-    }
-
-    /**
-     * Show create private group modal
-     */
-    showCreatePrivateGroupModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal">
-                <div class="modal-header">
-                    <h3>🔐 Neue verschlüsselte Gruppe erstellen</h3>
-                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>Gruppenname:</label>
-                        <input type="text" id="groupName" placeholder="Mein sicherer Raum" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Beschreibung:</label>
-                        <textarea id="groupDescription" placeholder="Beschreibung der Gruppe (optional)"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Mitglieder einladen (optional):</label>
-                        <input type="text" id="inviteMembers" placeholder="npub1... oder hex pubkey (kommagetrennt)">
-                        <small>Leer lassen, um später Mitglieder einzuladen</small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
-                        Abbrechen
-                    </button>
-                    <button class="btn btn-primary" onclick="createPrivateGroup()">
-                        Gruppe erstellen
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Set up global function for creating group
-        window.createPrivateGroup = async () => {
-            const groupName = document.getElementById('groupName').value.trim();
-            const groupDescription = document.getElementById('groupDescription').value.trim();
-            const inviteMembersInput = document.getElementById('inviteMembers').value.trim();
-            
-            if (!groupName) {
-                this.toastService.showError('Gruppenname ist erforderlich');
-                return;
-            }
-            
-            const invitedMembers = inviteMembersInput 
-                ? inviteMembersInput.split(',').map(m => m.trim()).filter(m => m.length > 0)
-                : [];
-            
-            try {
-                await this.handleCreatePrivateGroup(groupName, groupDescription, invitedMembers);
-                modal.remove();
-            } catch (error) {
-                console.error('❌ Fehler beim Erstellen der Gruppe:', error);
-            }
-        };
-    }
-
-    /**
-     * Handle create private group
-     */
-    async handleCreatePrivateGroup(groupName, description, invitedMembers) {
+    clearAllLocalStorage() {
         try {
-            console.log('🔐 Erstelle private Gruppe:', { groupName, description, invitedMembers });
-            
-            const result = await this.nip104.createRealPrivateGroup(groupName, description, invitedMembers);
-            
-            this.toastService.showSuccess(`Verschlüsselte Gruppe "${groupName}" erstellt!`);
-            
-            // Update the private groups list
-            this.updatePrivateGroupsList();
+            console.log('🗑️ Lösche kompletten localStorage...');
+            localStorage.clear();
+            console.log('✅ LocalStorage komplett gelöscht');
             
         } catch (error) {
-            console.error('❌ Fehler beim Erstellen der privaten Gruppe:', error);
-            this.toastService.showError('Fehler beim Erstellen der Gruppe');
+            console.error('❌ Fehler beim Löschen des localStorage:', error);
         }
     }
 
-    /**
-     * Update private groups list in UI
-     */
-    updatePrivateGroupsList() {
-        try {
-            const privateGroupsContainer = document.getElementById('privateGroupsList');
-            if (!privateGroupsContainer) return;
-            
-            const userGroups = this.nip104.getUserPrivateGroups();
-            
-            if (userGroups.length === 0) {
-                privateGroupsContainer.innerHTML = `
-                    <div class="no-groups">
-                        <p>🔒 Keine privaten Gruppen</p>
-                        <small>Erstelle eine verschlüsselte Gruppe oder warte auf Einladungen</small>
-                    </div>
-                `;
-                return;
-            }
-            
-            const groupsHtml = userGroups.map(group => `
-                <div class="private-group" data-group-id="${group.groupId}">
-                    <div class="group-icon">🔐</div>
-                    <div class="group-info">
-                        <div class="group-name">${group.name}</div>
-                        <div class="group-description">${group.description || 'Keine Beschreibung'}</div>
-                        <div class="group-meta">
-                            <span class="member-count">${group.memberCount} Mitglieder</span>
-                            ${group.isCreator ? '<span class="creator-badge">Creator</span>' : ''}
-                        </div>
-                    </div>
-                    <div class="group-actions">
-                        <button class="btn btn-sm btn-primary" onclick="enterPrivateGroup('${group.groupId}')">
-                            Betreten
-                        </button>
-                        ${group.isCreator ? `
-                            <button class="btn btn-sm btn-secondary" onclick="inviteToPrivateGroup('${group.groupId}')">
-                                Einladen
-                            </button>
-                        ` : ''}
-                        <button class="btn btn-sm btn-danger" onclick="leavePrivateGroup('${group.groupId}')">
-                            Verlassen
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-            
-            privateGroupsContainer.innerHTML = groupsHtml;
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Aktualisieren der Gruppen-Liste:', error);
-        }
-    }
-
-    /**
-     * Load room messages
-     */
-    async loadRoomMessages(roomId) {
-        try {
-            console.log(`📜 Lade Nachrichten für Raum: ${roomId}`);
-            
-            // Get stored messages or initialize empty array
-            const messages = this.getStoredMessages(roomId) || [];
-            this.displayMessages(messages);
-            
-            // TODO: Subscribe to room messages
-            // this.subscribeToRoomMessages(roomId);
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Laden der Raum-Nachrichten:', error);
-        }
-    }
-
-    /**
-     * Load DM contacts
-     */
-    async loadDMContacts() {
-        try {
-            console.log('👥 Lade DM-Kontakte...');
-            
-            // Get stored contacts or initialize empty map
-            const storedContacts = localStorage.getItem('dmContacts');
-            if (storedContacts) {
-                const contacts = JSON.parse(storedContacts);
-                this.dmContacts = new Map(Object.entries(contacts));
-            }
-            
-            // Update UI
-            this.updateDMContactsList();
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Laden der DM-Kontakte:', error);
-        }
-    }
-
-    /**
-     * Subscribe to room messages
-     */
-    subscribeToRoomMessages() {
-        try {
-            console.log('📡 Abonniere Raum-Nachrichten...');
-            
-            // TODO: Implement room message subscription
-            // This would use NIP-28 for public rooms
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Abonnieren von Raum-Nachrichten:', error);
-        }
-    }
-
-    /**
-     * Subscribe to direct messages
-     */
-    subscribeToDirectMessages() {
-        try {
-            console.log('📡 Abonniere Direktnachrichten...');
-            
-            // TODO: Implement DM subscription using NIP-04
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Abonnieren von Direktnachrichten:', error);
-        }
-    }
-
-    /**
-     * Get stored messages
-     */
-    getStoredMessages(roomId) {
-        try {
-            const stored = localStorage.getItem(`messages_${roomId}`);
-            return stored ? JSON.parse(stored) : [];
-        } catch (error) {
-            console.error('❌ Fehler beim Laden gespeicherter Nachrichten:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Store message
-     */
-    storeMessage(message, roomId) {
-        try {
-            const messages = this.getStoredMessages(roomId);
-            messages.push(message);
-            
-            // Keep only last 100 messages
-            if (messages.length > 100) {
-                messages.splice(0, messages.length - 100);
-            }
-            
-            localStorage.setItem(`messages_${roomId}`, JSON.stringify(messages));
-        } catch (error) {
-            console.error('❌ Fehler beim Speichern der Nachricht:', error);
-        }
-    }
-
-    /**
-     * Display messages
-     */
-    displayMessages(messages) {
-        const messagesContainer = this.element.querySelector('#messages');
-        if (!messagesContainer) return;
-        
-        messagesContainer.innerHTML = '';
-        
-        if (messages.length === 0) {
-            messagesContainer.innerHTML = `
-                <div class="welcome">
-                    <h3>Willkommen! 🎉</h3>
-                    <p>Noch keine Nachrichten...</p>
-                </div>
-            `;
-            return;
-        }
-        
-        messages.forEach(message => {
-            this.displayMessage(message);
-        });
-    }
-
-    /**
-     * Display single message
-     */
-    displayMessage(message) {
-        const messagesContainer = this.element.querySelector('#messages');
-        if (!messagesContainer) return;
-        
-        const messageElement = document.createElement('div');
-        messageElement.className = 'message';
-        messageElement.innerHTML = `
-            <div class="message-header">
-                <span class="message-author">${message.author || 'Unknown'}</span>
-                <span class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</span>
-            </div>
-            <div class="message-content">${message.content}</div>
-        `;
-        
-        messagesContainer.appendChild(messageElement);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    /**
-     * Update DM contacts list
-     */
-    updateDMContactsList() {
-        const dmContactsContainer = this.element.querySelector('#dmContacts');
-        if (!dmContactsContainer) return;
-        
-        if (this.dmContacts.size === 0) {
-            dmContactsContainer.innerHTML = `
-                <div class="no-contacts">
-                    <p>📝 Keine DM-Kontakte</p>
-                    <small>Starte eine neue Unterhaltung</small>
-                </div>
-            `;
-            return;
-        }
-        
-        const contactsHtml = Array.from(this.dmContacts.entries()).map(([pubkey, contact]) => `
-            <div class="dm-contact" data-pubkey="${pubkey}">
-                <div class="contact-avatar">👤</div>
-                <div class="contact-info">
-                    <div class="contact-name">${contact.name || 'Unknown'}</div>
-                    <div class="contact-pubkey">${pubkey.slice(0, 16)}...</div>
-                </div>
-            </div>
-        `).join('');
-        
-        dmContactsContainer.innerHTML = contactsHtml;
-    }
-
-    /**
-     * Show user profile
-     */
-    showUserProfile() {
-        try {
-            const userInfo = this.nostrService.getUserInfo();
-            alert(`👤 Dein Profil:\n\nNpub: ${userInfo.npub}\nPublic Key: ${userInfo.publicKey}`);
-        } catch (error) {
-            console.error('❌ Fehler beim Anzeigen des Profils:', error);
-            alert('Fehler beim Laden des Profils');
-        }
-    }
-
-    /**
-     * Dispatch event (placeholder for event system)
-     */
-    dispatchEvent(eventName, data = null) {
-        try {
-            console.log(`📡 Event dispatched: ${eventName}`, data);
-            
-            // Simple event handling - in a real app, you'd use a proper event system
-            switch (eventName) {
-                case 'showSettings':
-                    alert('⚙️ Einstellungen (noch nicht implementiert)');
-                    break;
-                case 'showRelays':
-                    alert('🔗 Relays (noch nicht implementiert)');
-                    break;
-                default:
-                    console.warn(`❓ Unbekanntes Event: ${eventName}`);
-            }
-        } catch (error) {
-            console.error('❌ Fehler beim Dispatchen des Events:', error);
-        }
-    }
+    // =================================================================
+    // MESSAGE HANDLING
+    // =================================================================
 
     /**
      * Handle send message
      */
-    handleSendMessage() {
+    async handleSendMessage() {
         const messageInput = this.element.querySelector('#messageInput');
         if (!messageInput) return;
         
@@ -823,15 +390,362 @@ export class ChatComponentRefactored {
             const storageKey = this.currentView === 'dm' ? `dm_${this.currentDMUser}` : this.currentRoom;
             this.storeMessage(messageObj, storageKey);
             
+            // Send to NOSTR network based on current view
+            if (this.currentView === 'dm' && this.currentDMUser) {
+                await this.sendDirectMessage(this.currentDMUser, message);
+            } else if (this.currentView === 'private_group') {
+                await this.sendPrivateGroupMessage(this.currentRoom, message);
+            } else if (this.currentView === 'room') {
+                await this.sendRoomMessage(this.currentRoom, message);
+            }
+            
             // Clear input
             messageInput.value = '';
             
-            // TODO: Send to NOSTR network
-            
         } catch (error) {
             console.error('❌ Fehler beim Senden der Nachricht:', error);
+            this.toastService.showError('Fehler beim Senden der Nachricht');
         }
     }
+
+    /**
+     * Send direct message via NIP-04
+     */
+    async sendDirectMessage(recipientPubkey, message) {
+        try {
+            if (!this.nip04) {
+                throw new Error('NIP-04 nicht verfügbar');
+            }
+            
+            await this.nip04.sendDirectMessage(recipientPubkey, message);
+            console.log('✅ DM gesendet an:', recipientPubkey);
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Senden der DM:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Send private group message via NIP-104
+     */
+    async sendPrivateGroupMessage(groupId, message) {
+        try {
+            if (!this.nip104) {
+                throw new Error('NIP-104 nicht verfügbar');
+            }
+            
+            await this.nip104.sendPrivateGroupMessage(groupId, message);
+            console.log('✅ Gruppennachricht gesendet an:', groupId);
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Senden der Gruppennachricht:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Send room message via NIP-28
+     */
+    async sendRoomMessage(roomId, message) {
+        try {
+            if (!this.nip28) {
+                throw new Error('NIP-28 nicht verfügbar');
+            }
+            
+            await this.nip28.sendRoomMessage(roomId, message);
+            console.log('✅ Raum-Nachricht gesendet an:', roomId);
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Senden der Raum-Nachricht:', error);
+            throw error;
+        }
+    }
+
+    // =================================================================
+    // DIRECT MESSAGES
+    // =================================================================
+
+    /**
+     * Start direct message
+     */
+    async startDirectMessage() {
+        const dmUserInput = this.element.querySelector('#dmUserInput');
+        if (!dmUserInput) return;
+        
+        const userInput = dmUserInput.value.trim();
+        if (!userInput) return;
+        
+        try {
+            console.log('💬 Starte DM mit:', userInput);
+            
+            // Validate and convert npub to hex if needed
+            let pubkey;
+            try {
+                if (userInput.startsWith('npub1')) {
+                    pubkey = this.nostrService.npubToHex(userInput);
+                } else if (userInput.length === 64) {
+                    pubkey = userInput;
+                } else {
+                    throw new Error('Invalid format');
+                }
+            } catch (error) {
+                this.toastService.showError('Ungültiges Format. Verwende npub1... oder hex pubkey');
+                return;
+            }
+            
+            // Add to contacts with NIP-02 service
+            if (this.nip02) {
+                await this.nip02.addContact(pubkey);
+            }
+            
+            // Add to local contacts
+            this.dmContacts.set(pubkey, {
+                name: `User ${pubkey.slice(0, 8)}`,
+                pubkey: pubkey,
+                lastMessage: '',
+                unreadCount: 0
+            });
+            
+            // Save contacts
+            const contactsObj = Object.fromEntries(this.dmContacts);
+            localStorage.setItem('dmContacts', JSON.stringify(contactsObj));
+            
+            // Subscribe to DMs from this user
+            if (this.nip04) {
+                this.nip04.subscribeToDirectMessages(pubkey, (message) => {
+                    this.handleDirectMessage(message);
+                });
+            }
+            
+            // Open DM
+            this.openDirectMessage(pubkey);
+            
+            // Clear input
+            dmUserInput.value = '';
+            
+            // Update contacts list
+            await this.loadDMContacts();
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Starten der DM:', error);
+            this.toastService.showError('Fehler beim Starten der DM');
+        }
+    }
+
+    /**
+     * Open direct message
+     */
+    openDirectMessage(pubkey) {
+        try {
+            console.log('📩 Öffne DM mit:', pubkey);
+            
+            // Update current DM user
+            this.currentDMUser = pubkey;
+            this.currentView = 'dm';
+            
+            // Update chat header
+            const contact = this.dmContacts.get(pubkey);
+            const name = contact ? contact.name : `User ${pubkey.slice(0, 8)}`;
+            this.updateChatHeader(`💬 ${name}`);
+            
+            // Load DM messages
+            this.loadDMMessages(pubkey);
+            
+            // Update active contact
+            const dmContacts = this.element.querySelectorAll('.dm-contact');
+            dmContacts.forEach(contact => contact.classList.remove('active'));
+            
+            const activeContact = this.element.querySelector(`[data-pubkey="${pubkey}"]`);
+            if (activeContact) activeContact.classList.add('active');
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Öffnen der DM:', error);
+        }
+    }
+
+    /**
+     * Load DM messages
+     */
+    async loadDMMessages(pubkey) {
+        try {
+            console.log(`📜 Lade DM-Nachrichten für: ${pubkey}`);
+            
+            // Get stored messages first
+            const messages = this.getStoredMessages(`dm_${pubkey}`) || [];
+            this.displayMessages(messages);
+            
+            // Load from NOSTR network using NIP-04
+            if (this.nip04) {
+                console.log('🔄 Lade DM-Nachrichten aus dem NOSTR-Netzwerk...');
+                
+                // Subscribe to direct messages from this user
+                this.nip04.subscribeToDirectMessages(pubkey, (message) => {
+                    this.handleDirectMessage(message);
+                });
+                
+                // Load existing messages
+                const networkMessages = await this.nip04.getDirectMessages(pubkey);
+                if (networkMessages && networkMessages.length > 0) {
+                    console.log(`📥 ${networkMessages.length} DM-Nachrichten aus dem Netzwerk geladen`);
+                    
+                    // Merge with stored messages (avoid duplicates)
+                    const allMessages = [...messages];
+                    for (const msg of networkMessages) {
+                        if (!allMessages.find(m => m.id === msg.id)) {
+                            allMessages.push(msg);
+                            this.storeMessage(msg, `dm_${pubkey}`);
+                        }
+                    }
+                    
+                    // Sort by timestamp and display
+                    allMessages.sort((a, b) => a.created_at - b.created_at);
+                    this.displayMessages(allMessages);
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der DM-Nachrichten:', error);
+        }
+    }
+
+    /**
+     * Handle direct message
+     */
+    handleDirectMessage(message) {
+        console.log('📩 Neue Direktnachricht:', message);
+        
+        // Store message - only continue if successfully stored (not a duplicate)
+        const wasStored = this.storeMessage(message, `dm_${message.from || message.pubkey}`);
+        if (!wasStored) {
+            console.log('⚠️ DM nicht angezeigt (Duplikat oder Fehler)');
+            return;
+        }
+        
+        // Update contact info
+        const pubkey = message.from || message.pubkey;
+        if (this.dmContacts.has(pubkey)) {
+            const contact = this.dmContacts.get(pubkey);
+            contact.lastMessage = message.content;
+            contact.lastMessageTime = message.created_at * 1000;
+            contact.unreadCount = (contact.unreadCount || 0) + 1;
+            
+            // Save updated contacts
+            const contactsObj = Object.fromEntries(this.dmContacts);
+            localStorage.setItem('dmContacts', JSON.stringify(contactsObj));
+        }
+        
+        // If this is the current DM conversation, display message
+        if (this.currentView === 'dm' && this.currentDMUser === pubkey) {
+            this.displayMessage(message);
+            
+            // Mark as read
+            const contact = this.dmContacts.get(pubkey);
+            if (contact) {
+                contact.unreadCount = 0;
+                const contactsObj = Object.fromEntries(this.dmContacts);
+                localStorage.setItem('dmContacts', JSON.stringify(contactsObj));
+            }
+        }
+        
+        // Update contacts list
+        this.updateDMContactsList();
+        
+        // Show toast notification if not current conversation
+        if (this.currentView !== 'dm' || this.currentDMUser !== pubkey) {
+            const contact = this.dmContacts.get(pubkey);
+            const name = contact ? contact.name : `User ${pubkey.slice(0, 8)}`;
+            this.toastService.showInfo(`💬 Neue Nachricht von ${name}`);
+        }
+    }
+
+    /**
+     * Load DM contacts
+     */
+    async loadDMContacts() {
+        try {
+            console.log('👥 Lade DM-Kontakte...');
+            
+            // Load from localStorage first
+            const storedContacts = localStorage.getItem('dmContacts');
+            if (storedContacts) {
+                const contactsObj = JSON.parse(storedContacts);
+                this.dmContacts = new Map(Object.entries(contactsObj));
+            }
+            
+            // Load from NIP-02 contact list if available
+            if (this.nip02) {
+                try {
+                    const contactList = this.nip02.getAllContacts();
+                    if (contactList && Array.isArray(contactList) && contactList.length > 0) {
+                        console.log(`📇 ${contactList.length} Kontakte aus dem Netzwerk geladen`);
+                        
+                        for (const contact of contactList) {
+                            if (contact.pubkey && !this.dmContacts.has(contact.pubkey)) {
+                                this.dmContacts.set(contact.pubkey, {
+                                    name: contact.name || contact.petname || `User ${contact.pubkey.slice(0, 8)}`,
+                                    pubkey: contact.pubkey,
+                                    lastMessage: '',
+                                    unreadCount: 0
+                                });
+                            }
+                        }
+                        
+                        // Save updated contacts
+                        const contactsObj = Object.fromEntries(this.dmContacts);
+                        localStorage.setItem('dmContacts', JSON.stringify(contactsObj));
+                    } else {
+                        console.log('📇 Keine Kontakte im Netzwerk gefunden');
+                    }
+                } catch (error) {
+                    console.error('❌ Fehler beim Laden der NIP-02 Kontakte:', error);
+                }
+            }
+            
+            // Update UI
+            this.updateDMContactsList();
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der DM-Kontakte:', error);
+        }
+    }
+
+    /**
+     * Update DM contacts list
+     */
+    updateDMContactsList() {
+        const dmContactsContainer = this.element.querySelector('#dmContacts');
+        if (!dmContactsContainer) return;
+        
+        dmContactsContainer.innerHTML = this.renderDMContactsList();
+    }
+
+    /**
+     * Subscribe to direct messages
+     */
+    subscribeToDirectMessages() {
+        try {
+            console.log('📡 Abonniere Direktnachrichten...');
+            
+            if (this.nip04) {
+                // Subscribe to all direct messages
+                this.nip04.subscribeToEncryptedDMs((message) => {
+                    this.handleDirectMessage(message);
+                });
+                
+                console.log('✅ DM-Abonnement aktiviert');
+            } else {
+                console.warn('⚠️ NIP-04 nicht verfügbar für DM-Abonnement');
+            }
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Abonnieren von Direktnachrichten:', error);
+        }
+    }
+
+    // =================================================================
+    // UTILITY METHODS
+    // =================================================================
 
     /**
      * Switch tab
@@ -895,89 +809,400 @@ export class ChatComponentRefactored {
     }
 
     /**
-     * Start direct message
+     * Update chat header
      */
-    startDirectMessage() {
-        const dmUserInput = this.element.querySelector('#dmUserInput');
-        if (!dmUserInput) return;
-        
-        const userInput = dmUserInput.value.trim();
-        if (!userInput) return;
-        
-        try {
-            console.log('💬 Starte DM mit:', userInput);
-            
-            // TODO: Validate and convert npub to hex if needed
-            const pubkey = userInput;
-            
-            // Add to contacts
-            this.dmContacts.set(pubkey, {
-                name: `User ${pubkey.slice(0, 8)}`,
-                pubkey: pubkey,
-                lastMessage: '',
-                unreadCount: 0
-            });
-            
-            // Save contacts
-            const contactsObj = Object.fromEntries(this.dmContacts);
-            localStorage.setItem('dmContacts', JSON.stringify(contactsObj));
-            
-            // Open DM
-            this.openDirectMessage(pubkey);
-            
-            // Clear input
-            dmUserInput.value = '';
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Starten der DM:', error);
+    updateChatHeader(title) {
+        const chatTitle = this.element.querySelector('#chatTitle');
+        if (chatTitle) {
+            chatTitle.textContent = title;
         }
     }
 
     /**
-     * Open direct message
+     * Get stored messages
      */
-    openDirectMessage(pubkey) {
+    getStoredMessages(roomId) {
         try {
-            console.log('📩 Öffne DM mit:', pubkey);
-            
-            // Update current DM user
-            this.currentDMUser = pubkey;
-            this.currentView = 'dm';
-            
-            // Update chat header
-            const contact = this.dmContacts.get(pubkey);
-            const name = contact ? contact.name : `User ${pubkey.slice(0, 8)}`;
-            this.updateChatHeader(`💬 ${name}`);
-            
-            // Load DM messages
-            this.loadDMMessages(pubkey);
-            
-            // Update active contact
-            const dmContacts = this.element.querySelectorAll('.dm-contact');
-            dmContacts.forEach(contact => contact.classList.remove('active'));
-            
-            const activeContact = this.element.querySelector(`[data-pubkey="${pubkey}"]`);
-            if (activeContact) activeContact.classList.add('active');
-            
+            const stored = localStorage.getItem(`messages_${roomId}`);
+            return stored ? JSON.parse(stored) : [];
         } catch (error) {
-            console.error('❌ Fehler beim Öffnen der DM:', error);
+            console.error('❌ Fehler beim Laden gespeicherter Nachrichten:', error);
+            return [];
         }
     }
 
     /**
-     * Load DM messages
+     * Store message
      */
-    async loadDMMessages(pubkey) {
+    storeMessage(message, roomId) {
         try {
-            console.log(`📜 Lade DM-Nachrichten für: ${pubkey}`);
+            const messages = this.getStoredMessages(roomId);
             
-            const messages = this.getStoredMessages(`dm_${pubkey}`) || [];
+            // Check for duplicates using message ID or timestamp+content
+            const messageId = message.id || `${message.timestamp}_${message.content}`;
+            const isDuplicate = messages.some(msg => 
+                (msg.id && msg.id === messageId) || 
+                (msg.timestamp === message.timestamp && msg.content === message.content)
+            );
+            
+            if (isDuplicate) {
+                console.log('⚠️ Duplikat-Nachricht ignoriert:', messageId);
+                return false; // Indicate duplicate
+            }
+            
+            messages.push(message);
+            
+            // Keep only last 100 messages
+            if (messages.length > 100) {
+                messages.splice(0, messages.length - 100);
+            }
+            
+            localStorage.setItem(`messages_${roomId}`, JSON.stringify(messages));
+            console.log('💾 Nachricht gespeichert:', messageId);
+            return true; // Indicate success
+        } catch (error) {
+            console.error('❌ Fehler beim Speichern der Nachricht:', error);
+            return false; // Indicate failure
+        }
+    }
+
+    /**
+     * Display messages
+     */
+    displayMessages(messages) {
+        const messagesContainer = this.element.querySelector('#messages');
+        if (!messagesContainer) return;
+        
+        messagesContainer.innerHTML = '';
+        
+        if (messages.length === 0) {
+            messagesContainer.innerHTML = `
+                <div class="welcome">
+                    <h3>Willkommen! 🎉</h3>
+                    <p>Noch keine Nachrichten...</p>
+                </div>
+            `;
+            return;
+        }
+        
+        messages.forEach(message => {
+            this.displayMessage(message);
+        });
+    }
+
+    /**
+     * Display single message
+     */
+    displayMessage(message) {
+        const messagesContainer = this.element.querySelector('#messages');
+        if (!messagesContainer) return;
+        
+        const messageElement = document.createElement('div');
+        messageElement.className = 'message';
+        messageElement.innerHTML = `
+            <div class="message-header">
+                <span class="message-author">${message.author || 'Unknown'}</span>
+                <span class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</span>
+            </div>
+            <div class="message-content">${message.content}</div>
+        `;
+        
+        messagesContainer.appendChild(messageElement);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    /**
+     * Set services for the component
+     */
+    setServices(services) {
+        this.services = services;
+        
+        // Update service references if needed
+        if (services.nostrService) {
+            this.nostrService = services.nostrService;
+        }
+        if (services.toastService) {
+            this.toastService = services.toastService;
+        }
+        
+        console.log('📦 Services an ChatComponentRefactored übergeben');
+    }
+
+    // =================================================================
+    // PLACEHOLDER METHODS (TO BE IMPLEMENTED)
+    // =================================================================
+
+    /**
+     * Load room messages
+     */
+    async loadRoomMessages(roomId) {
+        try {
+            console.log(`📜 Lade Nachrichten für Raum: ${roomId}`);
+            
+            // Get stored messages or initialize empty array
+            const messages = this.getStoredMessages(roomId) || [];
             this.displayMessages(messages);
             
-            // TODO: Load from NOSTR network
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der Raum-Nachrichten:', error);
+        }
+    }
+
+    /**
+     * Subscribe to room messages
+     */
+    subscribeToRoomMessages() {
+        try {
+            console.log('📡 Abonniere Raum-Nachrichten...');
+            
+            // Unsubscribe from previous room
+            this.unsubscribeFromCurrentRoom();
+            
+            if (this.nip28) {
+                // Subscribe to current room messages
+                const subscriptionId = this.nip28.subscribeToRoom(this.currentRoom, (message) => {
+                    this.handleRoomMessage(message);
+                });
+                
+                // Store subscription for cleanup
+                this.subscriptions.set('room_' + this.currentRoom, subscriptionId);
+                
+                console.log('✅ Raum-Abonnement aktiviert für:', this.currentRoom);
+            } else {
+                console.warn('⚠️ NIP-28 nicht verfügbar für Raum-Abonnement');
+            }
             
         } catch (error) {
-            console.error('❌ Fehler beim Laden der DM-Nachrichten:', error);
+            console.error('❌ Fehler beim Abonnieren von Raum-Nachrichten:', error);
         }
+    }
+
+    /**
+     * Unsubscribe from current room
+     */
+    unsubscribeFromCurrentRoom() {
+        try {
+            const roomSubKey = 'room_' + this.currentRoom;
+            const subscriptionId = this.subscriptions.get(roomSubKey);
+            
+            if (subscriptionId) {
+                // Unsubscribe from relay service
+                this.nostrService.relayService.unsubscribe(subscriptionId);
+                this.subscriptions.delete(roomSubKey);
+                console.log('🔌 Raum-Abonnement beendet für:', this.currentRoom);
+            }
+        } catch (error) {
+            console.error('❌ Fehler beim Beenden des Raum-Abonnements:', error);
+        }
+    }
+
+    /**
+     * Handle room message
+     */
+    handleRoomMessage(message) {
+        console.log('📩 Neue Raum-Nachricht:', message);
+        
+        // Store message - only continue if successfully stored (not a duplicate)
+        const wasStored = this.storeMessage(message, message.roomId || this.currentRoom);
+        if (!wasStored) {
+            console.log('⚠️ Nachricht nicht angezeigt (Duplikat oder Fehler)');
+            return;
+        }
+        
+        // If this is the current room, display message
+        if (this.currentView === 'room' && this.currentRoom === (message.roomId || this.currentRoom)) {
+            this.displayMessage(message);
+        }
+        
+        // Show toast notification if not current conversation
+        if (this.currentView !== 'room' || this.currentRoom !== (message.roomId || this.currentRoom)) {
+            const roomName = this.roomConfig[message.roomId || this.currentRoom]?.name || 'Unbekannter Raum';
+            this.toastService.showInfo(`🏠 Neue Nachricht in ${roomName}`);
+        }
+    }
+
+    /**
+     * Subscribe to private group messages
+     */
+    subscribeToPrivateGroupMessages() {
+        try {
+            console.log('📡 Abonniere Private Group Messages...');
+            
+            // Subscribe to group invitations
+            if (this.nip104) {
+                this.nip104.subscribeToGroupInvites((invite) => {
+                    console.log('📧 Neue Gruppeneinladung:', invite);
+                    this.handleGroupInvitation(invite);
+                });
+            }
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Abonnieren von Private Group Messages:', error);
+        }
+    }
+
+    /**
+     * Handle group invitation
+     */
+    handleGroupInvitation(invite) {
+        // Show invitation notification
+        this.toastService.showSuccess(`Einladung zu Gruppe "${invite.groupName}" erhalten`);
+        
+        // Update private groups list
+        this.updatePrivateGroupsList();
+    }
+
+    /**
+     * Update private groups list
+     */
+    updatePrivateGroupsList() {
+        try {
+            const privateGroupsContainer = document.getElementById('privateGroupsList');
+            if (!privateGroupsContainer) return;
+            
+            const userGroups = this.nip104.getAllPrivateGroups();
+            
+            if (userGroups.length === 0) {
+                privateGroupsContainer.innerHTML = `
+                    <div class="no-groups">
+                        <p>🔒 Keine privaten Gruppen</p>
+                        <small>Erstelle eine verschlüsselte Gruppe oder warte auf Einladungen</small>
+                    </div>
+                `;
+                return;
+            }
+            
+            const groupsHtml = userGroups.map(group => `
+                <div class="private-group" data-group-id="${group.groupId}">
+                    <div class="group-icon">🔐</div>
+                    <div class="group-info">
+                        <div class="group-name">${group.name}</div>
+                        <div class="group-description">${group.description || 'Keine Beschreibung'}</div>
+                        <div class="group-meta">
+                            <span class="member-count">${group.memberCount} Mitglieder</span>
+                            ${group.isCreator ? '<span class="creator-badge">Creator</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="group-actions">
+                        <button class="btn btn-sm btn-primary" onclick="enterPrivateGroup('${group.groupId}')">
+                            Betreten
+                        </button>
+                        ${group.isCreator ? `
+                            <button class="btn btn-sm btn-secondary" onclick="inviteToPrivateGroup('${group.groupId}')">
+                                Einladen
+                            </button>
+                        ` : ''}
+                        <button class="btn btn-sm btn-danger" onclick="leavePrivateGroup('${group.groupId}')">
+                            Verlassen
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            privateGroupsContainer.innerHTML = groupsHtml;
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Aktualisieren der Gruppen-Liste:', error);
+        }
+    }
+
+    /**
+     * Enter a private group
+     */
+    async enterPrivateGroup(groupId) {
+        try {
+            console.log(`🚪 Betrete private Gruppe: ${groupId}`);
+            
+            // Check if group exists (simplified access check)
+            const groupInfo = this.nip104.getGroupInfo(groupId);
+            if (!groupInfo) {
+                this.toastService.showError('Gruppe nicht gefunden');
+                return;
+            }
+            
+            // Switch to private group view
+            this.currentView = 'private_group';
+            this.currentRoom = groupId;
+            
+            // Update UI
+            this.updateChatHeader(groupInfo.name);
+            await this.loadPrivateGroupMessages(groupId);
+            
+            this.toastService.showSuccess(`Gruppe "${groupInfo.name}" betreten`);
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Betreten der Gruppe:', error);
+            this.toastService.showError('Fehler beim Betreten der Gruppe');
+        }
+    }
+
+    /**
+     * Leave a private group
+     */
+    async leavePrivateGroup(groupId) {
+        try {
+            // Simple implementation: remove from local storage
+            const groups = this.nip104.getAllPrivateGroups();
+            const filteredGroups = groups.filter(group => group.id !== groupId);
+            
+            // Save filtered groups (simplified)
+            localStorage.setItem('privateGroups', JSON.stringify(filteredGroups));
+            
+            this.updatePrivateGroupsList();
+            this.toastService.showSuccess('Gruppe verlassen');
+        } catch (error) {
+            console.error('❌ Fehler beim Verlassen der Gruppe:', error);
+            this.toastService.showError('Fehler beim Verlassen der Gruppe');
+        }
+    }
+
+    /**
+     * Invite user to private group
+     */
+    async inviteToPrivateGroup(groupId) {
+        const userPubkey = prompt('Geben Sie die npub oder hex pubkey des Benutzers ein:');
+        if (!userPubkey) return;
+        
+        try {
+            // TODO: Implement invitation logic
+            this.toastService.showSuccess('Einladung gesendet');
+        } catch (error) {
+            console.error('❌ Fehler beim Senden der Einladung:', error);
+            this.toastService.showError('Fehler beim Senden der Einladung');
+        }
+    }
+
+    /**
+     * Load private group messages
+     */
+    async loadPrivateGroupMessages(groupId) {
+        try {
+            console.log(`📜 Lade Nachrichten für private Gruppe: ${groupId}`);
+            
+            const messages = this.getStoredMessages(`private_group_${groupId}`) || [];
+            this.displayMessages(messages);
+            
+            // Subscribe to new messages for this group
+            this.nip104.subscribeToPrivateGroup(groupId, (message) => {
+                this.handlePrivateGroupMessage(message);
+            });
+            
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der Gruppennachrichten:', error);
+        }
+    }
+
+    /**
+     * Handle private group message
+     */
+    handlePrivateGroupMessage(message) {
+        console.log('📩 Neue private Gruppennachricht:', message);
+        
+        if (this.currentView === 'private_group' && this.currentRoom === message.groupId) {
+            this.displayMessage(message);
+        }
+        
+        // Store message
+        this.storeMessage(message, `private_group_${message.groupId}`);
     }
 }

@@ -13,42 +13,49 @@ export class RelayManager {
 
     render() {
         this.element = document.createElement('div');
-        this.element.className = 'modal hidden';
+        this.element.className = 'modal-overlay';
         this.element.innerHTML = `
-            <div class="modal-content">
-                <h3>🔗 Relay-Verwaltung</h3>
-                <div class="relay-section">
-                    <h4>📡 Aktive Relays</h4>
-                    <div class="relay-list" id="relayList">
-                        <!-- Relays werden hier geladen -->
-                    </div>
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>🔗 Relay-Verwaltung</h3>
+                    <button class="modal-close" id="closeModal">×</button>
                 </div>
-                <div class="relay-section">
-                    <h4>➕ Neuen Relay hinzufügen</h4>
-                    <div class="add-relay-form">
-                        <input type="url" id="newRelayUrl" placeholder="wss://relay.example.com" />
-                        <button class="btn btn-primary" id="addRelayBtn">Hinzufügen</button>
-                    </div>
-                </div>
-                <div class="relay-section">
-                    <h4>📊 Relay-Statistiken</h4>
-                    <div class="relay-stats" id="relayStats">
-                        <div class="stat-item">
-                            <span>Verbundene Relays:</span>
-                            <span id="connectedCount">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span>Gesamt Relays:</span>
-                            <span id="totalCount">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span>Durchschnittliche Latenz:</span>
-                            <span id="avgLatency">0ms</span>
+                <div class="modal-body">
+                    <div class="relay-section">
+                        <h4>📡 Aktive Relays</h4>
+                        <div class="relay-list" id="relayList">
+                            <!-- Relays werden hier geladen -->
                         </div>
                     </div>
+                    
+                    <div class="relay-section">
+                        <h4>➕ Neuen Relay hinzufügen</h4>
+                        <div class="form-group">
+                            <input type="url" id="newRelayUrl" placeholder="wss://relay.example.com" />
+                            <button class="btn btn-primary" id="addRelayBtn">Hinzufügen</button>
+                        </div>
+                    </div>
+                    
+                    <div class="relay-section">
+                        <h4>📊 Relay-Statistiken</h4>
+                        <div class="relay-stats" id="relayStats">
+                            <div class="stat-item">
+                                <span>Verbundene Relays:</span>
+                                <span id="connectedCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>Gesamt Relays:</span>
+                                <span id="totalCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>Durchschnittliche Latenz:</span>
+                                <span id="avgLatency">0ms</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-actions">
-                    <button class="btn btn-secondary" id="testAllBtn">🔍 Alle testen</button>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="testAllBtn">🔄 Alle testen</button>
                     <button class="btn btn-primary" id="closeBtn">Schließen</button>
                 </div>
             </div>
@@ -59,220 +66,166 @@ export class RelayManager {
     }
 
     setupEventListeners() {
+        const closeModal = this.element.querySelector('#closeModal');
         const closeBtn = this.element.querySelector('#closeBtn');
         const addRelayBtn = this.element.querySelector('#addRelayBtn');
         const testAllBtn = this.element.querySelector('#testAllBtn');
         const newRelayUrl = this.element.querySelector('#newRelayUrl');
 
+        // Close modal handlers
+        closeModal.addEventListener('click', () => this.hide());
         closeBtn.addEventListener('click', () => this.hide());
-        addRelayBtn.addEventListener('click', () => this.addRelay());
-        testAllBtn.addEventListener('click', () => this.testAllRelays());
         
-        newRelayUrl.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.addRelay();
-        });
-
-        // Close on outside click
+        // Click outside to close
         this.element.addEventListener('click', (e) => {
             if (e.target === this.element) {
                 this.hide();
             }
         });
 
-        // Close on ESC key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isVisible) {
-                this.hide();
-            }
+        addRelayBtn.addEventListener('click', () => this.addRelay());
+        testAllBtn.addEventListener('click', () => this.testAllRelays());
+        
+        newRelayUrl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addRelay();
         });
     }
 
-    async show() {
-        this.element.classList.remove('hidden');
+    show() {
+        if (this.isVisible) return;
+        
         this.isVisible = true;
-        await this.updateDisplay();
+        this.element.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        // Update relay list
+        this.updateRelayList();
+        this.updateStats();
+        
+        // Animation
+        requestAnimationFrame(() => {
+            this.element.querySelector('.modal').style.transform = 'translateY(0)';
+            this.element.querySelector('.modal').style.opacity = '1';
+        });
     }
 
     hide() {
-        this.element.classList.add('hidden');
+        if (!this.isVisible) return;
+        
         this.isVisible = false;
-    }
-
-    async updateDisplay() {
-        try {
-            const relayStats = this.relayService.getRelayStats();
-            const relayList = this.element.querySelector('#relayList');
-            
-            // Clear existing list
-            relayList.innerHTML = '';
-            
-            // Add relay items
-            if (Object.keys(relayStats).length === 0) {
-                relayList.innerHTML = '<p>Keine Relays konfiguriert.</p>';
-                return;
+        this.element.classList.remove('active');
+        document.body.style.overflow = '';
+        
+        // Animation
+        this.element.querySelector('.modal').style.transform = 'translateY(-20px)';
+        this.element.querySelector('.modal').style.opacity = '0';
+        
+        setTimeout(() => {
+            if (this.element.parentNode) {
+                this.element.parentNode.removeChild(this.element);
             }
-            
-            Object.entries(relayStats).forEach(([url, relay]) => {
-                const relayItem = document.createElement('div');
-                relayItem.className = 'relay-item';
-                relayItem.innerHTML = `
-                    <div class="relay-info">
-                        <span class="relay-url">${url}</span>
-                        <span class="relay-status ${relay.connected ? 'connected' : 'disconnected'}">
-                            ${relay.connected ? '🟢 Verbunden' : '🔴 Getrennt'}
-                        </span>
-                    </div>
-                    <div class="relay-actions">
-                        <button class="btn btn-sm" onclick="window.relayManager.toggleRelay('${url}')">
-                            ${relay.connected ? 'Trennen' : 'Verbinden'}
-                        </button>
-                        <button class="btn btn-sm" onclick="window.relayManager.testRelay('${url}')">
-                            🔍 Test
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="window.relayManager.removeRelay('${url}')">
-                            🗑️
-                        </button>
-                    </div>
-                `;
-                relayList.appendChild(relayItem);
-            });
-            
-            // Update statistics
-            this.updateStats(relayStats);
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Laden der Relays:', error);
-            this.toastService.showError('Fehler beim Laden der Relays');
-        }
+        }, 300);
     }
 
-    updateStats(relayStats) {
-        const connectedCount = Object.values(relayStats).filter(r => r.connected).length;
-        const totalCount = Object.keys(relayStats).length;
+    updateRelayList() {
+        const relayList = this.element.querySelector('#relayList');
+        const relays = this.relayService.getRelays();
+        
+        if (relays.length === 0) {
+            relayList.innerHTML = '<div class="empty-state">Keine Relays konfiguriert</div>';
+            return;
+        }
+        
+        relayList.innerHTML = relays.map(relay => `
+            <div class="relay-item" data-url="${relay.url}">
+                <div class="relay-info">
+                    <div class="relay-url">${relay.url}</div>
+                    <div class="relay-status ${relay.connected ? 'connected' : 'disconnected'}">
+                        ${relay.connected ? '🟢 Verbunden' : '🔴 Getrennt'}
+                    </div>
+                </div>
+                <div class="relay-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="this.closest('.relay-item').dispatchEvent(new CustomEvent('test-relay'))">
+                        🔄 Testen
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="this.closest('.relay-item').dispatchEvent(new CustomEvent('remove-relay'))">
+                        🗑️ Entfernen
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        // Add event listeners to relay items
+        relayList.querySelectorAll('.relay-item').forEach(item => {
+            item.addEventListener('test-relay', () => this.testRelay(item.dataset.url));
+            item.addEventListener('remove-relay', () => this.removeRelay(item.dataset.url));
+        });
+    }
+
+    updateStats() {
+        const relays = this.relayService.getRelays();
+        const connectedCount = relays.filter(r => r.connected).length;
+        const totalCount = relays.length;
+        const avgLatency = relays.reduce((sum, r) => sum + (r.latency || 0), 0) / totalCount || 0;
         
         this.element.querySelector('#connectedCount').textContent = connectedCount;
         this.element.querySelector('#totalCount').textContent = totalCount;
-        
-        // Calculate average latency (mock for now)
-        const avgLatency = connectedCount > 0 ? Math.floor(Math.random() * 100) + 50 : 0;
-        this.element.querySelector('#avgLatency').textContent = avgLatency + 'ms';
+        this.element.querySelector('#avgLatency').textContent = `${Math.round(avgLatency)}ms`;
     }
 
-    async addRelay() {
-        const input = this.element.querySelector('#newRelayUrl');
-        const url = input.value.trim();
+    addRelay() {
+        const urlInput = this.element.querySelector('#newRelayUrl');
+        const url = urlInput.value.trim();
         
         if (!url) {
-            this.toastService.showError('Bitte eine gültige Relay-URL eingeben');
+            this.toastService.showError('Bitte geben Sie eine Relay-URL ein');
             return;
         }
         
-        if (!url.startsWith('wss://')) {
-            this.toastService.showError('Relay-URL muss mit wss:// beginnen');
+        if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
+            this.toastService.showError('Relay-URL muss mit ws:// oder wss:// beginnen');
             return;
         }
         
         try {
-            await this.relayService.addRelay(url);
-            input.value = '';
-            await this.updateDisplay();
-            this.toastService.showSuccess('Relay erfolgreich hinzugefügt!');
+            this.relayService.addRelay(url);
+            urlInput.value = '';
+            this.updateRelayList();
+            this.updateStats();
+            this.toastService.showSuccess('Relay hinzugefügt');
         } catch (error) {
-            console.error('❌ Fehler beim Hinzufügen:', error);
             this.toastService.showError('Fehler beim Hinzufügen des Relays');
         }
     }
 
-    async removeRelay(url) {
-        if (!confirm(`Relay ${url} wirklich entfernen?`)) return;
-        
-        try {
-            await this.relayService.removeRelay(url);
-            await this.updateDisplay();
-            this.toastService.showSuccess('Relay entfernt!');
-        } catch (error) {
-            console.error('❌ Fehler beim Entfernen:', error);
-            this.toastService.showError('Fehler beim Entfernen des Relays');
+    removeRelay(url) {
+        if (confirm(`Sind Sie sicher, dass Sie den Relay ${url} entfernen möchten?`)) {
+            this.relayService.removeRelay(url);
+            this.updateRelayList();
+            this.updateStats();
+            this.toastService.showSuccess('Relay entfernt');
         }
     }
 
-    async toggleRelay(url) {
-        try {
-            const stats = this.relayService.getRelayStats();
-            const relay = stats[url];
-            
-            if (relay && relay.connected) {
-                // Implement disconnect logic
-                this.toastService.showInfo('Relay trennen nicht implementiert');
-            } else {
-                // Implement connect logic
-                await this.relayService.connectRelay(url);
-                this.toastService.showSuccess(`Relay ${url} verbunden`);
-            }
-            
-            await this.updateDisplay();
-        } catch (error) {
-            console.error('❌ Fehler beim Umschalten:', error);
-            this.toastService.showError('Fehler beim Umschalten des Relays');
-        }
+    testRelay(url) {
+        this.toastService.showInfo('Teste Relay...');
+        this.relayService.testRelay(url).then(() => {
+            this.updateRelayList();
+            this.updateStats();
+            this.toastService.showSuccess('Relay-Test abgeschlossen');
+        }).catch(() => {
+            this.toastService.showError('Relay-Test fehlgeschlagen');
+        });
     }
 
-    async testRelay(url) {
-        try {
-            this.toastService.showInfo(`Teste Relay ${url}...`);
-            const result = await this.relayService.testRelay(url);
-            
-            if (result) {
-                this.toastService.showSuccess(`Relay ${url} ist erreichbar`);
-            } else {
-                this.toastService.showError(`Relay ${url} ist nicht erreichbar`);
-            }
-            
-            await this.updateDisplay();
-        } catch (error) {
-            console.error('❌ Fehler beim Testen:', error);
-            this.toastService.showError('Fehler beim Testen des Relays');
-        }
-    }
-
-    async testAllRelays() {
-        try {
-            this.toastService.showInfo('Teste alle Relays...');
-            const stats = this.relayService.getRelayStats();
-            const urls = Object.keys(stats);
-            
-            let successCount = 0;
-            let failCount = 0;
-            
-            for (const url of urls) {
-                try {
-                    const result = await this.relayService.testRelay(url);
-                    if (result) {
-                        successCount++;
-                    } else {
-                        failCount++;
-                    }
-                } catch (error) {
-                    failCount++;
-                }
-            }
-            
-            this.toastService.showSuccess(`Test abgeschlossen: ${successCount} erfolgreich, ${failCount} fehlgeschlagen`);
-            await this.updateDisplay();
-            
-        } catch (error) {
-            console.error('❌ Fehler beim Testen aller Relays:', error);
-            this.toastService.showError('Fehler beim Testen der Relays');
-        }
-    }
-
-    destroy() {
-        if (this.element) {
-            this.element.remove();
-            this.element = null;
-        }
+    testAllRelays() {
+        this.toastService.showInfo('Teste alle Relays...');
+        this.relayService.testAllRelays().then(() => {
+            this.updateRelayList();
+            this.updateStats();
+            this.toastService.showSuccess('Alle Relay-Tests abgeschlossen');
+        }).catch(() => {
+            this.toastService.showError('Einige Relay-Tests fehlgeschlagen');
+        });
     }
 }
-
-// Global access for button clicks
-window.relayManager = null;

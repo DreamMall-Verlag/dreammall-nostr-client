@@ -16,6 +16,18 @@ import { SettingsModal } from './components/SettingsModal.js';
 import { RelayManager } from './components/RelayManager.js';
 import { APP_CONFIG } from './config/app-config.js';
 
+// Modal imports
+import { showUserProfileModal } from './components/ui/modals/UserProfileModal.js';
+import { showKeySettingsModal } from './components/ui/modals/KeySettingsModal.js';
+import { showRelaySettingsModal } from './components/ui/modals/RelaySettingsModal.js';
+
+import { NIP01_BasicProtocol } from './nips/NIP01_BasicProtocol.js';
+import { NIP02_ContactLists } from './nips/NIP02_ContactLists.js';
+import { NIP04_EncryptedDMs } from './nips/NIP04_EncryptedDMs.js';
+import { NIP17_KindMessages } from './nips/NIP17_KindMessages.js';
+import { NIP28_PublicChat } from './nips/NIP28_PublicChat.js';
+import { NIP104_PrivateGroups } from './nips/NIP104_PrivateGroups.js';
+
 console.log('🚀 DreamMall NOSTR Client startet...');
 
 // =================================================================
@@ -32,6 +44,9 @@ class NostrApp {
 
     async init() {
         try {
+            console.log('🔧 Erstelle Services...');
+            this.createServices();
+            
             console.log('🔧 Initialisiere Services...');
             await this.initializeServices();
             
@@ -53,19 +68,23 @@ class NostrApp {
         }
     }
 
-    async initializeServices() {
-        // Initialize services in correct order
-        this.services.storageService = new StorageService();
+    createServices() {
+        console.log('🏗️ Erstelle Services...');
+        
+        // Create services
         this.services.toastService = new ToastService();
-        this.services.keyService = new KeyService(this.services.storageService);
-        this.services.relayService = new RelayService();
+        this.services.storageService = new StorageService();
+        this.services.keyService = new KeyService(this.services.storageService, this.services.toastService);
         this.services.nostrService = new NostrService();
+        this.services.relayService = new RelayService(APP_CONFIG);
         
-        // Set up service dependencies AFTER all services are created
-        this.services.nostrService.setRelayService(this.services.relayService);
-        this.services.relayService.setNostrService(this.services.nostrService);
+        console.log('✅ Services erstellt');
+    }
+
+    async initializeServices() {
+        console.log('🔧 Initialisiere Services...');
         
-        // Pass all services to each service
+        // Services untereinander verknüpfen
         this.services.nostrService.setServices(this.services);
         this.services.relayService.setServices(this.services);
         
@@ -73,7 +92,36 @@ class NostrApp {
         await this.services.keyService.init?.();
         await this.services.relayService.init?.();
         
+        // NIPs initialisieren
+        await this.initializeNIPs();
+        
         console.log('✅ Services initialisiert');
+    }
+
+    async initializeNIPs() {
+        console.log('🔧 Initialisiere NOSTR NIPs...');
+        
+        // Basis-NIPs
+        this.nips = {
+            nip01: new NIP01_BasicProtocol(this.services.nostrService),
+            nip02: new NIP02_ContactLists(this.services.nostrService, null),
+            nip04: new NIP04_EncryptedDMs(this.services.nostrService, null),
+            nip17: new NIP17_KindMessages(this.services.nostrService, null),
+            nip28: new NIP28_PublicChat(this.services.nostrService, null),
+            nip104: new NIP104_PrivateGroups(this.services.nostrService, null)
+        };
+        
+        // Referenzen setzen (NIPs benötigen nip01 für Basis-Funktionalität)
+        this.nips.nip02.nip01 = this.nips.nip01;
+        this.nips.nip04.nip01 = this.nips.nip01;
+        this.nips.nip17.nip01 = this.nips.nip01;
+        this.nips.nip28.nip01 = this.nips.nip01;
+        this.nips.nip104.nip01 = this.nips.nip01;
+        
+        // NIPs an Services weitergeben
+        this.services.nostrService.nips = this.nips;
+        
+        console.log('✅ NIPs initialisiert:', Object.keys(this.nips));
     }
 
     createComponents() {
@@ -87,6 +135,9 @@ class NostrApp {
         // Create header
         this.components.header = new HeaderComponent();
         appContainer.appendChild(this.components.header.render());
+        
+        // Set services for header component
+        this.components.header.setServices(this.services);
         
         // Create main content area
         const mainContent = document.createElement('div');
@@ -104,6 +155,11 @@ class NostrApp {
             this.services.nostrService,
             this.services.toastService
         );
+        
+        // Provide services to chat component if it has setServices method
+        if (this.components.chat.setServices) {
+            this.components.chat.setServices(this.services);
+        }
         
         // Keep original chat component for fallback
        /* this.components.chatLegacy = new ChatComponent(
@@ -150,16 +206,46 @@ class NostrApp {
             this.showScreen('setup');
         });
         
-        // Listen for UI events
-        document.addEventListener('showSettings', () => {
-            this.components.settingsModal.show();
-        });
-        
-        document.addEventListener('showRelays', () => {
-            this.components.relayManager.show();
-        });
+        // UI-Buttons aktivieren
+        this.setupUIButtons();
         
         console.log('✅ Event-Listeners eingerichtet');
+    }
+
+    setupUIButtons() {
+        // Settings-Button aktivieren
+        const settingsBtn = document.getElementById('settingsBtn');
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => {
+                this.components.settingsModal.show();
+            });
+        }
+        
+        // Profile-Button aktivieren
+        const profileBtn = document.getElementById('profileBtn');
+        if (profileBtn) {
+            profileBtn.addEventListener('click', () => {
+                this.showUserProfile();
+            });
+        }
+    }
+    
+    
+    /**
+     * Add relay button to header
+     */
+    addRelayButton() {
+        const header = document.querySelector('.app-controls');
+        if (header && !document.getElementById('relayBtn')) {
+            const relayBtn = document.createElement('button');
+            relayBtn.id = 'relayBtn';
+            relayBtn.className = 'btn btn-secondary';
+            relayBtn.innerHTML = '🌐 Relays';
+            relayBtn.addEventListener('click', () => {
+                this.components.relayManager.show();
+            });
+            header.appendChild(relayBtn);
+        }
     }
 
     async determineInitialState() {

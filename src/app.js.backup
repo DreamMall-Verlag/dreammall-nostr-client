@@ -1,0 +1,920 @@
+// =================================================================
+// DreamMall NOSTR Client - Main Application (Component-based)
+// Following NOSTR NIPs: NIP-01, NIP-17, NIP-28, NIP-65
+// =================================================================
+
+import { KeyService } from './services/KeyService.js';
+import { NostrService } from './services/NostrService.js';
+import { RelayService } from './services/RelayService.js';
+import { StorageService } from './services/StorageService.js';
+import { ToastService } from './services/ToastService.js';
+
+import { HeaderComponent } from './components/HeaderComponent.js';
+import { SetupComponent } from './components/SetupComponent.js';
+import { ChatComponentRefactored } from './components/ChatComponentRefactored.js';
+import { SettingsModal } from './components/SettingsModal.js';
+import { RelayManager } from './components/RelayManager.js';
+import { APP_CONFIG } from './config/app-config.js';
+
+import { NIP01_BasicProtocol } from './nips/NIP01_BasicProtocol.js';
+import { NIP02_ContactLists } from './nips/NIP02_ContactLists.js';
+import { NIP04_EncryptedDMs } from './nips/NIP04_EncryptedDMs.js';
+import { NIP17_KindMessages } from './nips/NIP17_KindMessages.js';
+import { NIP28_PublicChat } from './nips/NIP28_PublicChat.js';
+import { NIP104_PrivateGroups } from './nips/NIP104_PrivateGroups.js';
+
+console.log('🚀 DreamMall NOSTR Client startet...');
+
+// =================================================================
+// Application Class
+// =================================================================
+
+class NostrApp {
+    constructor() {
+        this.services = {};
+        this.components = {};
+        this.currentScreen = 'setup';
+        this.isInitialized = false;
+    }
+
+    async init() {
+        try {
+            console.log('🔧 Erstelle Services...');
+            this.createServices();
+            
+            console.log('🔧 Initialisiere Services...');
+            await this.initializeServices();
+            
+            console.log('🎨 Erstelle UI-Komponenten...');
+            this.createComponents();
+            
+            console.log('⚡ Richte Event-Listeners ein...');
+            this.setupEventListeners();
+            
+            console.log('📱 Bestimme initialen Zustand...');
+            await this.determineInitialState();
+            
+            this.isInitialized = true;
+            console.log('✅ App erfolgreich initialisiert!');
+            
+        } catch (error) {
+            console.error('❌ App-Initialisierung fehlgeschlagen:', error);
+            this.services.toastService?.showError('Fehler beim Starten der App');
+        }
+    }
+
+    createServices() {
+        console.log('🏗️ Erstelle Services...');
+        
+        // Create services
+        this.services.toastService = new ToastService();
+        this.services.storageService = new StorageService();
+        this.services.keyService = new KeyService(this.services.storageService, this.services.toastService);
+        this.services.nostrService = new NostrService();
+        this.services.relayService = new RelayService(APP_CONFIG);
+        
+        console.log('✅ Services erstellt');
+    }
+
+    async initializeServices() {
+        console.log('🔧 Initialisiere Services...');
+        
+        // Services untereinander verknüpfen
+        this.services.nostrService.setServices(this.services);
+        this.services.relayService.setServices(this.services);
+        
+        // Initialize services
+        await this.services.keyService.init?.();
+        await this.services.relayService.init?.();
+        
+        // NIPs initialisieren
+        await this.initializeNIPs();
+        
+        console.log('✅ Services initialisiert');
+    }
+
+    async initializeNIPs() {
+        console.log('🔧 Initialisiere NOSTR NIPs...');
+        
+        // Basis-NIPs
+        this.nips = {
+            nip01: new NIP01_BasicProtocol(this.services.nostrService),
+            nip02: new NIP02_ContactLists(this.services.nostrService, null),
+            nip04: new NIP04_EncryptedDMs(this.services.nostrService, null),
+            nip17: new NIP17_KindMessages(this.services.nostrService, null),
+            nip28: new NIP28_PublicChat(this.services.nostrService, null),
+            nip104: new NIP104_PrivateGroups(this.services.nostrService, null)
+        };
+        
+        // Referenzen setzen (NIPs benötigen nip01 für Basis-Funktionalität)
+        this.nips.nip02.nip01 = this.nips.nip01;
+        this.nips.nip04.nip01 = this.nips.nip01;
+        this.nips.nip17.nip01 = this.nips.nip01;
+        this.nips.nip28.nip01 = this.nips.nip01;
+        this.nips.nip104.nip01 = this.nips.nip01;
+        
+        // NIPs an Services weitergeben
+        this.services.nostrService.nips = this.nips;
+        
+        console.log('✅ NIPs initialisiert:', Object.keys(this.nips));
+    }
+
+    createComponents() {
+        const app = document.getElementById('app');
+        
+        // Create main app container
+        const appContainer = document.createElement('div');
+        appContainer.className = 'app';
+        app.appendChild(appContainer);
+        
+        // Create header
+        this.components.header = new HeaderComponent();
+        appContainer.appendChild(this.components.header.render());
+        
+        // Create main content area
+        const mainContent = document.createElement('div');
+        mainContent.id = 'mainContent';
+        appContainer.appendChild(mainContent);
+        
+        // Create setup component
+        this.components.setup = new SetupComponent(
+            this.services.keyService, 
+            this.services.toastService
+        );
+        
+        // Create chat component (use refactored version for better stability)
+        this.components.chat = new ChatComponentRefactored(
+            this.services.nostrService,
+            this.services.toastService
+        );
+        
+        // Provide services to chat component if it has setServices method
+        if (this.components.chat.setServices) {
+            this.components.chat.setServices(this.services);
+        }
+        
+        // Keep original chat component for fallback
+       /* this.components.chatLegacy = new ChatComponent(
+            this.services.nostrService,
+            this.services.toastService
+        );
+        */
+        
+        // Create modals
+        this.components.settingsModal = new SettingsModal(
+            this.services.keyService,
+            this.services.toastService
+        );
+        
+        this.components.relayManager = new RelayManager(
+            this.services.relayService,
+            this.services.toastService
+        );
+        
+        // Append modals to body
+        document.body.appendChild(this.components.settingsModal.render());
+        document.body.appendChild(this.components.relayManager.render());
+        
+        // Set global reference for relay manager
+        window.relayManager = this.components.relayManager;
+        
+        console.log('✅ Komponenten erstellt');
+    }
+
+    setupEventListeners() {
+        // Listen for key events
+        document.addEventListener('keysGenerated', (e) => {
+            console.log('🔑 Schlüssel generiert');
+            this.showScreen('chat');
+        });
+        
+        document.addEventListener('keysImported', (e) => {
+            console.log('📥 Schlüssel importiert');
+            this.showScreen('chat');
+        });
+        
+        document.addEventListener('keysDeleted', (e) => {
+            console.log('🗑️ Schlüssel gelöscht');
+            this.showScreen('setup');
+        });
+        
+        // Listen for UI events
+        document.addEventListener('showSettings', () => {
+            this.components.settingsModal.show();
+        });
+        
+        document.addEventListener('showRelays', () => {
+            this.components.relayManager.show();
+        });
+        
+        // User Profile Event
+        document.addEventListener('showUserProfile', () => {
+            this.showUserProfile();
+        });
+        
+        // Key Settings Event
+        document.addEventListener('showKeySettings', () => {
+            this.showKeySettings();
+        });
+        
+        // Relay Settings Event
+        document.addEventListener('showRelaySettings', () => {
+            this.showRelaySettings();
+        });
+        
+        // UI-Buttons aktivieren
+        this.setupUIButtons();
+        
+        console.log('✅ Event-Listeners eingerichtet');
+    }
+
+    setupUIButtons() {
+        // Settings-Button aktivieren
+        const settingsBtn = document.getElementById('settingsBtn');
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => {
+                this.components.settingsModal.show();
+            });
+        }
+        
+        // Profile-Button aktivieren
+        const profileBtn = document.getElementById('profileBtn');
+        if (profileBtn) {
+            profileBtn.addEventListener('click', () => {
+                this.showUserProfile();
+            });
+        }
+    }
+    
+    // =================================================================
+    // MODAL FUNCTIONS - PERMANENT IMPLEMENTATION
+    // =================================================================
+
+    /**
+     * Show User Profile Modal
+     */
+    showUserProfile() {
+        console.log('👤 Öffne Benutzer-Profil...');
+        
+        try {
+            const keyService = this.services.keyService;
+            const toastService = this.services.toastService;
+            
+            // Get current user synchronously
+            const user = keyService.getCurrentUser();
+            if (user) {
+                const profileModal = document.createElement('div');
+                profileModal.className = 'modal-overlay';
+                profileModal.innerHTML = `
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h3>👤 Benutzer-Profil</h3>
+                            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="profile-info">
+                                <p><strong>Öffentlicher Schlüssel:</strong></p>
+                                <p class="key-display">${user.publicKey}</p>
+                                <p><strong>NPUB:</strong></p>
+                                <p class="key-display">${user.npub || 'Nicht verfügbar'}</p>
+                                <p><strong>Erstellt:</strong></p>
+                                <p>${new Date().toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Schließen</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(profileModal);
+                setTimeout(() => profileModal.classList.add('show'), 10);
+                
+                // Copy-to-clipboard für Schlüssel
+                profileModal.querySelectorAll('.key-display').forEach(el => {
+                    el.style.cursor = 'pointer';
+                    el.title = 'Klicken zum Kopieren';
+                    el.addEventListener('click', () => {
+                        navigator.clipboard.writeText(el.textContent);
+                        toastService.showSuccess('In Zwischenablage kopiert');
+                    });
+                });
+            } else {
+                toastService.showError('Kein Benutzer gefunden');
+            }
+        } catch (error) {
+            console.error('Fehler beim Laden des Profils:', error);
+            toastService.showError('Fehler beim Laden des Profils');
+        }
+    }
+
+    // =================================================================
+    // MODAL FUNCTIONS - PERMANENT IMPLEMENTATION
+    // =================================================================
+
+    /**
+     * Show Key Settings Modal
+     */
+    showKeySettings() {
+        console.log('🔑 Öffne Schlüssel-Einstellungen...');
+        
+        const keyService = this.services.keyService;
+        const toastService = this.services.toastService;
+        
+        // Get current user data
+        const currentUser = keyService.getCurrentUser();
+        if (!currentUser) {
+            toastService.showError('Kein Benutzer gefunden');
+            return;
+        }
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>🔑 Schlüssel-Einstellungen</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h4>Aktuelle Schlüssel</h4>
+                        <div class="key-info-display">
+                            <div class="key-display-item">
+                                <span>Öffentlicher Schlüssel (Hex):</span>
+                                <div class="key-display-item">
+                                    <code>${currentUser.publicKey}</code>
+                                    <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('${currentUser.publicKey}')">📋 Kopieren</button>
+                                </div>
+                            </div>
+                            <div class="key-display-item">
+                                <span>NPUB:</span>
+                                <div class="key-display-item">
+                                    <code>${currentUser.npub || 'Nicht verfügbar'}</code>
+                                    <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('${currentUser.npub || ''}')">📋 Kopieren</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h4>Aktionen</h4>
+                        <div class="settings-actions">
+                            <button class="btn btn-warning" onclick="exportKeys()">📤 Schlüssel exportieren</button>
+                            <button class="btn btn-secondary" onclick="importKeys()">📥 Schlüssel importieren</button>
+                            <button class="btn btn-danger" onclick="deleteKeys()">🗑️ Schlüssel löschen</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Schließen</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Global functions for modal
+        window.copyToClipboard = (text) => {
+            navigator.clipboard.writeText(text);
+            toastService.showSuccess('In Zwischenablage kopiert');
+        };
+        
+        window.exportKeys = () => {
+            try {
+                const keyData = keyService.exportKeys();
+                const blob = new Blob([JSON.stringify(keyData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'nostr-keys.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                toastService.showSuccess('Schlüssel exportiert');
+            } catch (error) {
+                console.error('Export-Fehler:', error);
+                toastService.showError('Fehler beim Exportieren');
+            }
+        };
+        
+        window.importKeys = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const keyData = JSON.parse(e.target.result);
+                            keyService.importKeys(keyData);
+                            toastService.showSuccess('Schlüssel importiert');
+                            modal.remove();
+                        } catch (error) {
+                            console.error('Import-Fehler:', error);
+                            toastService.showError('Fehler beim Importieren');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        };
+        
+        window.deleteKeys = () => {
+            if (confirm('Alle Schlüssel löschen? Dies kann nicht rückgängig gemacht werden!')) {
+                try {
+                    keyService.deleteKeys();
+                    toastService.showSuccess('Schlüssel gelöscht');
+                    modal.remove();
+                } catch (error) {
+                    console.error('Lösch-Fehler:', error);
+                    toastService.showError('Fehler beim Löschen');
+                }
+            }
+        };
+    }
+
+    /**
+     * Show Relay Settings Modal
+     */
+    showRelaySettings() {
+        console.log('🔗 Öffne Relay-Einstellungen...');
+        
+        const relayService = this.services.relayService;
+        const toastService = this.services.toastService;
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>🔗 Relay-Einstellungen</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h4>Verbundene Relays</h4>
+                        <div class="relay-list" id="relayList">
+                            <div class="loading">Lade Relays...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h4>Neues Relay hinzufügen</h4>
+                        <div class="relay-add-form">
+                            <input type="url" id="newRelayUrl" placeholder="wss://relay.example.com" />
+                            <button class="btn btn-primary" onclick="addRelay()">➕ Hinzufügen</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Schließen</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Load and display relays
+        const updateRelayList = () => {
+            const relayList = modal.querySelector('#relayList');
+            const relays = relayService.getRelays();
+            
+            if (relays.length === 0) {
+                relayList.innerHTML = '<div class="no-relays">Keine Relays verbunden</div>';
+                return;
+            }
+            
+            relayList.innerHTML = relays.map(relay => `
+                <div class="relay-item">
+                    <div class="relay-info">
+                        <div class="relay-url">${relay.url}</div>
+                        <div class="relay-status ${relay.connected ? 'connected' : 'disconnected'}">
+                            ${relay.connected ? '✅ Verbunden' : '❌ Getrennt'}
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="removeRelay('${relay.url}')">🗑️</button>
+                </div>
+            `).join('');
+        };
+        
+        // Global functions for modal
+        window.addRelay = () => {
+            const urlInput = modal.querySelector('#newRelayUrl');
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                toastService.showError('Bitte eine URL eingeben');
+                return;
+            }
+            
+            if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
+                toastService.showError('URL muss mit wss:// oder ws:// beginnen');
+                return;
+            }
+            
+            try {
+                relayService.addRelay(url);
+                toastService.showSuccess('Relay hinzugefügt');
+                urlInput.value = '';
+                updateRelayList();
+            } catch (error) {
+                console.error('Relay-Fehler:', error);
+                toastService.showError('Fehler beim Hinzufügen des Relays');
+            }
+        };
+        
+        window.removeRelay = (url) => {
+            if (confirm(`Relay ${url} entfernen?`)) {
+                try {
+                    relayService.removeRelay(url);
+                    toastService.showSuccess('Relay entfernt');
+                    updateRelayList();
+                } catch (error) {
+                    console.error('Relay-Fehler:', error);
+                    toastService.showError('Fehler beim Entfernen des Relays');
+                }
+            }
+        };
+        
+        // Initial load
+        updateRelayList();
+    }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const keyData = JSON.parse(event.target.result);
+                            keyService.importKeys(keyData);
+                            toastService.showSuccess('Schlüssel importiert');
+                            modal.remove();
+                        } catch (error) {
+                            console.error('Import-Fehler:', error);
+                            toastService.showError('Fehler beim Importieren');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        };
+        
+        window.deleteKeys = () => {
+            if (confirm('⚠️ WARNUNG: Alle Schlüssel werden gelöscht! Fortfahren?')) {
+                keyService.deleteKeys();
+                toastService.showWarning('Schlüssel gelöscht');
+                modal.remove();
+                location.reload();
+            }
+        };
+ 
+
+    /**
+     * Show Relay Settings Modal
+     */
+    showRelaySettings() {
+        console.log('📡 Öffne Relay-Einstellungen...');
+        
+        const relayService = this.services.relayService;
+        const toastService = this.services.toastService;
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>📡 Relay-Einstellungen</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="relay-section">
+                        <h4>Aktive Relays</h4>
+                        <div class="relay-list" id="relayList">
+                            ${this.renderRelayList()}
+                        </div>
+                    </div>
+                    
+                    <div class="relay-section">
+                        <h4>Neues Relay hinzufügen</h4>
+                        <div class="add-relay-form">
+                            <input type="text" id="newRelayUrl" placeholder="wss://relay.example.com" />
+                            <button class="btn btn-primary" onclick="addNewRelay()">➕ Hinzufügen</button>
+                        </div>
+                    </div>
+                    
+                    <div class="relay-section">
+                        <h4>Statistiken</h4>
+                        <div class="relay-stats">
+                            <div class="stat-item">
+                                <span>Verbundene Relays:</span>
+                                <span id="connectedCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>Gesendete Nachrichten:</span>
+                                <span id="sentCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>Empfangene Nachrichten:</span>
+                                <span id="receivedCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="resetRelays()">🔄 Zurücksetzen</button>
+                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Schließen</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Update stats
+        this.updateRelayStats();
+        
+        // Global functions for modal
+        window.addNewRelay = () => {
+            const input = document.getElementById('newRelayUrl');
+            const url = input.value.trim();
+            
+            if (!url) {
+                toastService.showError('Bitte geben Sie eine Relay-URL ein');
+                return;
+            }
+            
+            if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
+                toastService.showError('Relay-URL muss mit wss:// oder ws:// beginnen');
+                return;
+            }
+            
+            try {
+                relayService.addRelay(url);
+                toastService.showSuccess('Relay hinzugefügt');
+                input.value = '';
+                document.getElementById('relayList').innerHTML = this.renderRelayList();
+                this.updateRelayStats();
+            } catch (error) {
+                console.error('Fehler beim Hinzufügen des Relays:', error);
+                toastService.showError('Fehler beim Hinzufügen des Relays');
+            }
+        };
+        
+        window.removeRelay = (url) => {
+            if (confirm(`Relay "${url}" entfernen?`)) {
+                relayService.removeRelay(url);
+                toastService.showSuccess('Relay entfernt');
+                document.getElementById('relayList').innerHTML = this.renderRelayList();
+                this.updateRelayStats();
+            }
+        };
+        
+        window.reconnectRelay = (url) => {
+            relayService.reconnectRelay(url);
+            toastService.showInfo('Verbindung wird wiederhergestellt...');
+            setTimeout(() => {
+                document.getElementById('relayList').innerHTML = this.renderRelayList();
+                this.updateRelayStats();
+            }, 1000);
+        };
+        
+        window.resetRelays = () => {
+            if (confirm('⚠️ Alle Relays zurücksetzen auf Standard-Konfiguration?')) {
+                relayService.resetToDefaults();
+                toastService.showSuccess('Relays zurückgesetzt');
+                document.getElementById('relayList').innerHTML = this.renderRelayList();
+                this.updateRelayStats();
+            }
+        };
+    }
+
+    /**
+     * Render relay list for modal
+     */
+    renderRelayList() {
+        const relayService = this.services.relayService;
+        const relays = relayService.getRelays();
+        
+        if (relays.length === 0) {
+            return '<p class="no-relays">Keine Relays konfiguriert</p>';
+        }
+        
+        return relays.map(relay => `
+            <div class="relay-item">
+                <div class="relay-info">
+                    <div class="relay-url">${relay.url}</div>
+                    <div class="relay-status ${relay.connected ? 'connected' : 'disconnected'}">
+                        ${relay.connected ? '🟢 Verbunden' : '🔴 Getrennt'}
+                    </div>
+                </div>
+                <div class="relay-actions">
+                    ${!relay.connected ? `<button class="btn btn-sm btn-secondary" onclick="reconnectRelay('${relay.url}')">🔄 Verbinden</button>` : ''}
+                    <button class="btn btn-sm btn-danger" onclick="removeRelay('${relay.url}')">🗑️ Entfernen</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * Update relay statistics
+     */
+    updateRelayStats() {
+        const relayService = this.services.relayService;
+        const stats = relayService.getStats();
+        
+        const connectedCount = document.getElementById('connectedCount');
+        const sentCount = document.getElementById('sentCount');
+        const receivedCount = document.getElementById('receivedCount');
+        
+        if (connectedCount) connectedCount.textContent = stats.connectedRelays || 0;
+        if (sentCount) sentCount.textContent = stats.sentMessages || 0;
+        if (receivedCount) receivedCount.textContent = stats.receivedMessages || 0;
+    }
+
+    // =================================================================
+    // END OF MODAL FUNCTIONS
+    // =================================================================
+    
+    addRelayButton() {
+        const header = document.querySelector('.app-controls');
+        if (header && !document.getElementById('relayBtn')) {
+            const relayBtn = document.createElement('button');
+            relayBtn.id = 'relayBtn';
+            relayBtn.className = 'btn btn-secondary';
+            relayBtn.innerHTML = '🌐 Relays';
+            relayBtn.addEventListener('click', () => {
+                this.components.relayManager.show();
+            });
+            header.appendChild(relayBtn);
+        }
+    }
+
+    async determineInitialState() {
+        try {
+            const hasKeys = await this.services.keyService.hasKeys();
+            
+            if (hasKeys) {
+                console.log('🔑 Bestehende Schlüssel gefunden');
+                this.showScreen('chat');
+            } else {
+                console.log('🆕 Keine Schlüssel gefunden, zeige Setup');
+                this.showScreen('setup');
+            }
+        } catch (error) {
+            console.error('❌ Fehler beim Bestimmen des initialen Zustands:', error);
+            this.showScreen('setup');
+        }
+    }
+
+    showScreen(screenName) {
+        const mainContent = document.getElementById('mainContent');
+        if (!mainContent) return;
+        
+        // Clear current content
+        mainContent.innerHTML = '';
+        
+        // Hide/show header controls
+        if (screenName === 'chat') {
+            this.components.header.showControls();
+            this.components.header.updateStatus(true);
+        } else {
+            this.components.header.hideControls();
+            this.components.header.updateStatus(false);
+        }
+        
+        // Show appropriate screen
+        switch (screenName) {
+            case 'setup':
+                mainContent.appendChild(this.components.setup.render());
+                break;
+                
+            case 'chat':
+                mainContent.appendChild(this.components.chat.render());
+                this.initializeChat();
+                break;
+                
+            default:
+                console.warn('⚠️ Unbekannter Screen:', screenName);
+                this.showScreen('setup');
+        }
+        
+        this.currentScreen = screenName;
+        console.log(`📱 Screen gewechselt zu: ${screenName}`);
+    }
+
+    async initializeChat() {
+        try {
+            console.log('🚀 Beginne Chat-Initialisierung...');
+            
+            // Get current user
+            const currentUser = await this.services.keyService.getCurrentUser();
+            console.log('👤 Aktueller Benutzer:', currentUser);
+            
+            if (!currentUser) {
+                throw new Error('Kein aktueller Benutzer gefunden');
+            }
+            
+            // Initialize NOSTR service with keys
+            console.log('🔧 Initialisiere NOSTR Service...');
+            await this.services.nostrService.init(currentUser);
+            
+            // Connect to relays
+            console.log('🌐 Verbinde zu Relays...');
+            await this.services.relayService.connect();
+            
+            // Wait a bit for connections to establish
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Check connection status
+            const relayStatus = this.services.relayService.getStatus();
+            console.log('📊 Relay-Status:', relayStatus);
+            
+            // Update status
+            this.components.header.updateStatus(relayStatus.connectedRelays > 0);
+            
+            console.log('💬 Chat erfolgreich initialisiert!');
+            this.services.toastService.showSuccess('Mit NOSTR-Netzwerk verbunden!');
+            
+        } catch (error) {
+            console.error('❌ Chat-Initialisierung fehlgeschlagen:', error);
+            this.services.toastService.showError('Fehler beim Verbinden mit NOSTR');
+            
+            // Continue anyway for testing
+            console.log('⚠️ Fahre trotz Fehler fort...');
+        }
+    }
+
+    destroy() {
+        // Clean up components
+        Object.values(this.components).forEach(component => {
+            component.destroy?.();
+        });
+        
+        // Clean up services
+        Object.values(this.services).forEach(service => {
+            service.destroy?.();
+        });
+        
+        console.log('App bereinigt');
+    }
+ 
+
+// =================================================================
+// Application Initialization
+// =================================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('📱 DOM geladen, starte App...');
+    
+    try {
+        const app = new NostrApp();
+        await app.init();
+        
+        // Make app globally available for debugging
+        window.nostrApp = app;
+        
+        console.log('🎉 DreamMall NOSTR Client bereit!');
+        
+    } catch (error) {
+        console.error('💥 Kritischer Fehler beim Starten:', error);
+        
+        // Fallback error display
+        const app = document.getElementById('app');
+        if (app) {
+            app.innerHTML = `
+                <div class="app">
+                    <div class="header">
+                        <h1>❌ Fehler</h1>
+                    </div>
+                    <div class="setup">
+                        <h2>Anwendung konnte nicht gestartet werden</h2>
+                        <p>Bitte laden Sie die Seite neu oder überprüfen Sie die Konsole für Details.</p>
+                        <button class="btn btn-primary" onclick="location.reload()">
+                            🔄 Seite neu laden
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+});
+
+// =================================================================
+// Global Error Handler
+// =================================================================
+
+window.addEventListener('error', (event) => {
+    console.error('🚨 Globaler Fehler:', event.error);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('🚨 Unhandled Promise Rejection:', event.reason);
+});
+
+console.log('📋 App-Skript geladen');

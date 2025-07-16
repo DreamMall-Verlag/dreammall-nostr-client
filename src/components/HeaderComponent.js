@@ -2,11 +2,17 @@
 // Header Component - Status and Controls
 // =================================================================
 
+// Import modals
+import { showUserProfileModal } from './ui/modals/UserProfileModal.js';
+import { showKeySettingsModal } from './ui/modals/KeySettingsModal.js';
+import { showRelaySettingsModal } from './ui/modals/RelaySettingsModal.js';
+
 export class HeaderComponent {
     constructor(title = 'DreamMall NOSTR Client') {
         this.title = title;
         this.element = null;
         this.isConnected = false;
+        this.services = null; // Will be set by parent
     }
 
     render() {
@@ -31,19 +37,32 @@ export class HeaderComponent {
     }
 
     setupEventListeners() {
-         const userBtn = this.element.querySelector('#userBtn');
+        const userBtn = this.element.querySelector('#userBtn');
         const settingsBtn = this.element.querySelector('#settingsBtn');
         const relaysBtn = this.element.querySelector('#relaysBtn');
 
+        userBtn.addEventListener('click', () => {
+            if (this.services) {
+                showUserProfileModal(this.services.keyService, this.services.toastService);
+            } else {
+                console.error('Services not set for HeaderComponent');
+            }
+        });
 
-         userBtn.addEventListener('click', () => this.showUserProfile());
-         
         settingsBtn?.addEventListener('click', () => {
-            this.dispatchEvent('showSettings');
+            if (this.services) {
+                showKeySettingsModal(this.services.keyService, this.services.toastService);
+            } else {
+                console.error('Services not set for HeaderComponent');
+            }
         });
 
         relaysBtn?.addEventListener('click', () => {
-            this.dispatchEvent('showRelays');
+            if (this.services) {
+                showRelaySettingsModal(this.services.relayService, this.services.toastService);
+            } else {
+                console.error('Services not set for HeaderComponent');
+            }
         });
     }
 
@@ -71,9 +90,14 @@ export class HeaderComponent {
         controls.style.display = 'none';
     }
 
-    dispatchEvent(eventName, detail = {}) {
-        const event = new CustomEvent(eventName, { detail });
-        document.dispatchEvent(event);
+
+
+    /**
+     * Set services for the header component
+     */
+    setServices(services) {
+        this.services = services;
+        console.log('📦 Services an HeaderComponent übergeben');
     }
 
     destroy() {

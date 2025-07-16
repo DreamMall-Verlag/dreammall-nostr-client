@@ -7,12 +7,19 @@ export const APP_CONFIG = {
     name: 'DreamMall NOSTR Client',
     version: '1.0.1',
     
+    // Test-Modus: Nur ein Relay für Tests verwenden
+    testMode: true,
+    
+    // Fresh Start: LocalStorage beim Start leeren
+    clearStorageOnStart: true,  // Auf false setzen, um Nachrichten zu behalten
+    
     // Standard-Relays
     defaultRelays: [
-        'wss://relay.damus.io',
-        'wss://relay.nostr.band',
-        'wss://nos.lol',
-        'wss://relay.snort.social'
+        'wss://relay.damus.io'  // Haupt-Test-Relay
+        // Weitere Relays für Produktion (auskommentiert für Tests):
+        // 'wss://relay.nostr.band',
+        // 'wss://nos.lol',
+        // 'wss://relay.snort.social'
     ],
     
     // Raum-Konfiguration

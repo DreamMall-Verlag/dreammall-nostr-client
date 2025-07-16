@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LocalStorage Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .storage-item { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .key { font-weight: bold; color: #333; }
+        .value { margin-top: 5px; background: #f5f5f5; padding: 5px; white-space: pre-wrap; }
+        button { margin: 5px; padding: 10px 15px; }
+        .clear-btn { background: #ff4444; color: white; border: none; }
+        .info-btn { background: #4444ff; color: white; border: none; }
+    </style>
+</head>
+<body>
+    <h1>LocalStorage Debug Tool</h1>
+    
+    <div>
+        <button class="info-btn" onclick="showAllStorage()">🔍 Alle LocalStorage Items anzeigen</button>
+        <button class="clear-btn" onclick="clearAllMessages()">🗑️ Alle Nachrichten löschen</button>
+        <button class="clear-btn" onclick="clearAllStorage()">⚠️ Kompletten LocalStorage löschen</button>
+    </div>
+    
+    <div id="output"></div>
+    
+    <script>
+        function showAllStorage() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<h2>LocalStorage Inhalt:</h2>';
+            
+            if (localStorage.length === 0) {
+                output.innerHTML += '<p>LocalStorage ist leer</p>';
+                return;
+            }
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                
+                const item = document.createElement('div');
+                item.className = 'storage-item';
+                
+                let displayValue = value;
+                let messageCount = 0;
+                
+                // Check if it's a messages array
+                if (key.startsWith('messages_')) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (Array.isArray(parsed)) {
+                            messageCount = parsed.length;
+                            displayValue = `Array with ${messageCount} messages:\n${JSON.stringify(parsed, null, 2)}`;
+                        }
+                    } catch (e) {
+                        displayValue = value;
+                    }
+                }
+                
+                item.innerHTML = `
+                    <div class="key">${key} ${messageCount > 0 ? `(${messageCount} Nachrichten)` : ''}</div>
+                    <div class="value">${displayValue}</div>
+                    <button onclick="deleteItem('${key}')">❌ Löschen</button>
+                `;
+                
+                output.appendChild(item);
+            }
+        }
+        
+        function clearAllMessages() {
+            if (!confirm('Alle Nachrichten aus dem LocalStorage löschen?')) return;
+            
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                keys.push(localStorage.key(i));
+            }
+            
+            let deletedCount = 0;
+            keys.forEach(key => {
+                if (key.startsWith('messages_')) {
+                    localStorage.removeItem(key);
+                    deletedCount++;
+                }
+            });
+            
+            alert(`${deletedCount} Nachrichten-Einträge gelöscht`);
+            showAllStorage();
+        }
+        
+        function clearAllStorage() {
+            if (!confirm('ACHTUNG: Kompletten LocalStorage löschen?')) return;
+            
+            localStorage.clear();
+            alert('LocalStorage komplett gelöscht');
+            showAllStorage();
+        }
+        
+        function deleteItem(key) {
+            if (!confirm(`Item "${key}" löschen?`)) return;
+            
+            localStorage.removeItem(key);
+            alert(`Item "${key}" gelöscht`);
+            showAllStorage();
+        }
+        
+        // Automatisch beim Laden anzeigen
+        window.onload = showAllStorage;
+    </script>
+</body>
+</html>

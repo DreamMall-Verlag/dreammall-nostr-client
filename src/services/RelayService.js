@@ -59,6 +59,28 @@ export class RelayService {
         this.connectionState = 'connecting';
         this.emit('connecting');
 
+        // Test-Modus prüfen
+        if (APP_CONFIG.testMode) {
+            console.log('🧪 Test-Modus aktiv - verwende nur Haupt-Relay');
+            const testRelay = APP_CONFIG.defaultRelays[0];
+            try {
+                const result = await this.connectToRelay(testRelay);
+                if (result) {
+                    console.log('✅ Test-Relay verbunden:', testRelay);
+                    this.connectionState = 'connected';
+                    this.emit('connected', { relayCount: 1 });
+                } else {
+                    throw new Error('Test-Relay-Verbindung fehlgeschlagen');
+                }
+            } catch (error) {
+                console.error('❌ Test-Relay-Verbindung fehlgeschlagen:', error);
+                this.connectionState = 'failed';
+                this.emit('disconnected');
+            }
+            return;
+        }
+
+        // Normaler Modus - alle Relays
         const savedRelays = this.getSavedRelays();
         const relaysToConnect = savedRelays.length > 0 ? savedRelays : this.defaultRelays;
 
@@ -99,6 +121,20 @@ export class RelayService {
             }
         }
         return connectedRelays;
+    }
+
+    // Neue Methode für RelayManager
+    getRelays() {
+        const relayList = [];
+        for (const [url, relay] of this.relays) {
+            relayList.push({
+                url: url,
+                connected: relay.connected,
+                lastPing: relay.lastPing,
+                latency: relay.latency || 0
+            });
+        }
+        return relayList;
     }
 
     getSavedRelays() {

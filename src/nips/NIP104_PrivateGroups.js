@@ -12,6 +12,9 @@ export class NIP104_PrivateGroups {
         this.KIND_PRIVATE_GROUP_INVITE = 106;
         this.privateGroups = new Map(); // groupId -> group info
         this.memberKeys = new Map(); // groupId -> shared key
+        
+        // Initialize groups from localStorage
+        this.initializeGroupsFromStorage();
     }
 
     /**
@@ -346,13 +349,21 @@ export class NIP104_PrivateGroups {
                 inviteOnly: true
             };
             
-            // 3. Store group locally
-            this.privateGroups.set(groupId, {
+            // 3. Store group locally (Memory + localStorage)
+            const groupData = {
                 ...groupMetadata,
-                members: new Set([this.nostrService.getPublicKey(), ...invitedMembers]),
+                members: Array.from(new Set([this.nostrService.getPublicKey(), ...invitedMembers])),
                 key: groupKey,
                 isCreator: true
+            };
+            
+            this.privateGroups.set(groupId, {
+                ...groupData,
+                members: new Set([this.nostrService.getPublicKey(), ...invitedMembers])
             });
+            
+            // Save to localStorage for persistence
+            this.saveGroupToStorage(groupId, groupData);
             
             // 4. Send encrypted invitations to members
             const invitationResults = [];
@@ -601,6 +612,56 @@ export class NIP104_PrivateGroups {
         } catch (error) {
             console.error('❌ NIP-104 Gruppe verlassen Fehler:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Save group to localStorage
+     */
+    saveGroupToStorage(groupId, groupData) {
+        try {
+            const existingGroups = this.loadGroupsFromStorage();
+            existingGroups[groupId] = groupData;
+            localStorage.setItem('privateGroups', JSON.stringify(existingGroups));
+            console.log('💾 Gruppe in localStorage gespeichert:', groupId);
+        } catch (error) {
+            console.error('❌ Fehler beim Speichern der Gruppe:', error);
+        }
+    }
+
+    /**
+     * Load groups from localStorage
+     */
+    loadGroupsFromStorage() {
+        try {
+            const stored = localStorage.getItem('privateGroups');
+            return stored ? JSON.parse(stored) : {};
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der Gruppen:', error);
+            return {};
+        }
+    }
+
+    /**
+     * Initialize groups from localStorage
+     */
+    initializeGroupsFromStorage() {
+        try {
+            const storedGroups = this.loadGroupsFromStorage();
+            console.log('📂 Lade Gruppen aus localStorage:', Object.keys(storedGroups));
+            
+            for (const [groupId, groupData] of Object.entries(storedGroups)) {
+                // Convert members array back to Set
+                const groupInfo = {
+                    ...groupData,
+                    members: new Set(groupData.members || [])
+                };
+                this.privateGroups.set(groupId, groupInfo);
+            }
+            
+            console.log('✅ Gruppen aus localStorage geladen:', this.privateGroups.size);
+        } catch (error) {
+            console.error('❌ Fehler beim Initialisieren der Gruppen:', error);
         }
     }
 }
