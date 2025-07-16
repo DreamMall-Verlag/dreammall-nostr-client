@@ -113,18 +113,9 @@ export class NostrService {
         try {
             if (!hexPubkey) return 'Nicht verfügbar';
             
-            // Try to use nip19 directly first
-            if (nip19.npubEncode) {
-                return nip19.npubEncode(hexPubkey);
-            }
+            // Use the correct nip19 function
+            return nip19.npubEncode(hexPubkey);
             
-            // Fallback to encode method
-            if (nip19.encode) {
-                return nip19.encode('npub', hexPubkey);
-            }
-            
-            // If both fail, return fallback
-            return `npub_${hexPubkey.slice(0, 16)}...`;
         } catch (error) {
             console.error('❌ hexToNpub conversion failed:', error);
             return `npub_${hexPubkey.slice(0, 16)}...`;
@@ -503,51 +494,7 @@ export class NostrService {
     // Helper method for npub encoding
     async encodeNpub(hexPubkey) {
         try {
-            console.log('🔄 NostrService.encodeNpub für:', hexPubkey);
-            
-            // Try with directly imported nip19 module first
-            if (nip19.npubEncode) {
-                const npub = nip19.npubEncode(hexPubkey);
-                console.log('✅ NostrService.encodeNpub mit direktem nip19.npubEncode:', npub);
-                return npub;
-            } else if (nip19.encode) {
-                const npub = nip19.encode('npub', hexPubkey);
-                console.log('✅ NostrService.encodeNpub mit direktem nip19.encode:', npub);
-                return npub;
-            }
-            
-            // Fallback to dynamic import if direct import doesn't work
-            try {
-                const dynamicNip19 = await import('nostr-tools/nip19');
-                
-                if (dynamicNip19.npubEncode) {
-                    const npub = dynamicNip19.npubEncode(hexPubkey);
-                    console.log('✅ NostrService.encodeNpub mit dynamic npubEncode:', npub);
-                    return npub;
-                } else if (dynamicNip19.encode) {
-                    const npub = dynamicNip19.encode('npub', hexPubkey);
-                    console.log('✅ NostrService.encodeNpub mit dynamic encode:', npub);
-                    return npub;
-                } else {
-                    throw new Error('No encoding function found in dynamic nip19');
-                }
-            } catch (importError) {
-                console.error('❌ NostrService.encodeNpub dynamic import failed:', importError);
-                
-                // Try with main nostr-tools import
-                const nostrTools = await import('nostr-tools');
-                if (nostrTools.nip19 && nostrTools.nip19.npubEncode) {
-                    const npub = nostrTools.nip19.npubEncode(hexPubkey);
-                    console.log('✅ NostrService.encodeNpub mit nostr-tools.nip19.npubEncode:', npub);
-                    return npub;
-                } else if (nostrTools.nip19 && nostrTools.nip19.encode) {
-                    const npub = nostrTools.nip19.encode('npub', hexPubkey);
-                    console.log('✅ NostrService.encodeNpub mit nostr-tools.nip19.encode:', npub);
-                    return npub;
-                } else {
-                    throw new Error('No encoding function found in nostr-tools');
-                }
-            }
+            return nip19.npubEncode(hexPubkey);
         } catch (error) {
             console.error('❌ NostrService.encodeNpub failed:', error);
             return null;
