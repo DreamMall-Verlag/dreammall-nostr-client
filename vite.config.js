@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   root: '.',
-  base: command === 'serve' ? '/' : '/dreammall-nostr-client/', // Lokal: '/', GitHub Pages: '/dreammall-nostr-client/'
+  base: mode === 'development' ? '/dreammall-nostr-client/' : '/', // Dev: GitHub Pages Pfad, Production: Root
   
   // Global polyfills
   define: {

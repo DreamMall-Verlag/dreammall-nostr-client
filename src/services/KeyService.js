@@ -174,16 +174,40 @@ export class KeyService {
     async importKeys(nsec) {
         try {
             console.log('🔑 Importiere Schlüssel...');
+            console.log('📝 Eingabe:', nsec);
+            
+            // Validate and clean nsec input
+            if (!nsec || typeof nsec !== 'string') {
+                throw new Error('Invalid nsec format: must be a string');
+            }
+            
+            // Trim whitespace and remove any quotes
+            nsec = nsec.trim().replace(/"/g, '');
+            console.log('🧹 Bereinigt:', nsec);
+            
+            // Check if it starts with nsec1
+            if (!nsec.startsWith('nsec1')) {
+                throw new Error('Invalid nsec format: must start with nsec1');
+            }
+            
+            // Check length (nsec should be 63 characters)
+            if (nsec.length !== 63) {
+                throw new Error(`Invalid nsec format: expected 63 characters, got ${nsec.length}`);
+            }
             
             // Decode nsec
             const { type, data } = nip19.decode(nsec);
             if (type !== 'nsec') {
-                throw new Error('Invalid nsec format');
+                throw new Error('Invalid nsec format: decoding failed');
             }
             
             const secretKey = data;
             const publicKey = getPublicKey(secretKey);
             const npub = nip19.npubEncode(publicKey);
+            
+            console.log('✅ Schlüssel erfolgreich dekodiert');
+            console.log('🔑 Public Key:', publicKey);
+            console.log('🔑 NPUB:', npub);
             
             // Store key pair
             this.keyPair = {

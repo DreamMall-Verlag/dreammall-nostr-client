@@ -238,20 +238,27 @@ body {
 .private-group {
     display: flex;
     align-items: center;
-    padding: 12px 20px;
+    padding: 15px 20px;
     border-bottom: 1px solid #f1f3f4;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .private-group:hover {
     background-color: #f8f9fa;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
 .private-group .group-icon {
-    font-size: 20px;
-    margin-right: 12px;
-    width: 24px;
+    font-size: 22px;
+    margin-right: 15px;
+    width: 28px;
     text-align: center;
+    color: #667eea;
 }
 
 .private-group .group-info {
@@ -262,14 +269,14 @@ body {
 .private-group .group-name {
     font-weight: 600;
     color: #2c3e50;
-    margin-bottom: 4px;
-    font-size: 14px;
+    margin-bottom: 6px;
+    font-size: 15px;
 }
 
 .private-group .group-description {
     color: #6c757d;
-    font-size: 12px;
-    margin-bottom: 4px;
+    font-size: 13px;
+    margin-bottom: 6px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -277,46 +284,51 @@ body {
 
 .private-group .group-meta {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .private-group .member-count {
     color: #6c757d;
+    background: #f8f9fa;
+    padding: 2px 8px;
+    border-radius: 12px;
 }
 
 .private-group .creator-badge {
-    background: #007bff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 2px 6px;
-    border-radius: 10px;
-    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
     font-weight: 500;
 }
 
 .private-group .group-actions {
     display: flex;
-    gap: 4px;
-    margin-left: 8px;
+    gap: 6px;
+    margin-left: 12px;
 }
 
 .private-group .group-actions button {
-    padding: 4px 8px;
+    padding: 6px 12px;
     border: none;
-    border-radius: 4px;
-    font-size: 11px;
+    border-radius: 6px;
+    font-size: 12px;
     cursor: pointer;
     transition: all 0.2s;
+    font-weight: 500;
 }
 
 .private-group .group-actions .btn-primary {
-    background: #007bff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 }
 
 .private-group .group-actions .btn-primary:hover {
-    background: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .private-group .group-actions .btn-secondary {
@@ -326,6 +338,7 @@ body {
 
 .private-group .group-actions .btn-secondary:hover {
     background: #545b62;
+    transform: translateY(-1px);
 }
 
 .private-group .group-actions .btn-danger {
@@ -335,6 +348,7 @@ body {
 
 .private-group .group-actions .btn-danger:hover {
     background: #c82333;
+    transform: translateY(-1px);
 }
 
 .no-groups {
